@@ -88,7 +88,11 @@ async function spFetch(url, opts = {}) {
   try {
     const r = await fetch(url, { ...opts, signal: ctrl.signal, headers: { Accept: NM, Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
     if (!r.ok) {
-      const e = new Error(`SharePoint ${r.status}: ${(await r.text()).slice(0, 200)}`);
+      // diagnóstico: qué llamada falló y qué permisos (scp) trae el token
+      let scp = "?";
+      try { scp = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).scp; } catch {}
+      const ruta = decodeURIComponent(url.replace(SITE, "")).slice(0, 120);
+      const e = new Error(`SharePoint ${r.status} en ${opts.method || "GET"} ${ruta} · permisos de la sesión: ${scp} · ${(await r.text()).slice(0, 160)}`);
       e.status = r.status;
       throw e;
     }
