@@ -54,7 +54,13 @@ async function main() {
   } catch (e) {
     clear(vista);
     if (e.status === 404) return pantallaSinRecetas();
-    vista.appendChild(el("div", { class: "aviso err" }, "No se pudieron leer los datos: " + e.message));
+    vista.appendChild(el("div", { class: "login" }, [
+      el("h1", {}, "No se pudieron leer los datos"),
+      el("p", {}, ["Sesión: ", el("b", {}, estado.usuario.correo)]),
+      el("div", { class: "aviso err", style: "text-align:left;word-break:break-word" }, e.message),
+      el("p", { class: "nota" }, "Si esa no es tu cuenta (los hubs comparten la sesión del navegador), cámbiala:"),
+      CONFIG.useMock ? null : el("button", { class: "btn btn-verde", onclick: async () => (await import("./auth.js")).logout() }, "Cambiar de cuenta"),
+    ]));
     return;
   }
   pintarBarra();

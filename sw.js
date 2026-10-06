@@ -1,7 +1,7 @@
 // Service worker: shell en caché para abrir rápido. "Red primero" (lección de
 // Hub Limpieza: con "caché primero" los equipos se quedaban con el JS viejo).
 // Los datos (SharePoint) nunca se cachean aquí.
-const CACHE_NAME = "hub-precios-fruta-v5";
+const CACHE_NAME = "hub-precios-fruta-v6";
 const SHELL_FILES = [
   "./", "./index.html", "./manifest.json", "./css/styles.css", "./icons/logo.png", "./icons/icon-192.png",
   "./js/app.js", "./js/config.js", "./js/auth.js", "./js/datos.js", "./js/dom.js", "./js/util.js", "./js/motor.js",
@@ -17,7 +17,8 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.hostname.endsWith("sharepoint.com") || url.hostname.includes("login.microsoftonline.com")) return;
   if (url.pathname.includes("/data/")) return;
-  e.respondWith(fetch(e.request).then((res) => {
+  // cache: "no-cache" → revalida con GitHub Pages (si no, el navegador sirve hasta 10 min la versión vieja)
+  e.respondWith(fetch(e.request, { cache: "no-cache" }).then((res) => {
     if (res.ok) { const c = res.clone(); caches.open(CACHE_NAME).then((k) => k.put(e.request, c)); }
     return res;
   }).catch(() => caches.match(e.request)));
