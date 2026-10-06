@@ -44,7 +44,14 @@ function pintar(cont) {
           s0.semana !== obj ? el("span", { class: "chip pend" }, ` aún no se carga ${semanaCorta(obj)}`) : null,
           estado.recetas.demo ? el("span", { class: "chip pend" }, "datos de ejemplo") : null]),
       ]),
-      el("div", { class: "acciones" }, [el("button", { class: "btn btn-sec", onclick: () => exportar(filas) }, "Descargar Excel")]),
+      el("div", { class: "acciones" }, [
+        el("span", { class: "mini", title: "Recetas y precio vigente por cliente (última factura)" }, `Datos de Odoo al ${estado.recetas.generado}`),
+        CONFIG.roles.admin.includes(estado.usuario.correo) && !CONFIG.useMock
+          ? el("label", { class: "btn btn-sec", title: "Subir recetas.json generado con precios-fruta/extraer_recetas.py" }, ["Actualizar datos de Odoo",
+              el("input", { type: "file", accept: ".json", class: "hidden", onchange: actualizarRecetas })])
+          : null,
+        el("button", { class: "btn btn-sec", onclick: () => exportar(filas) }, "Descargar Excel"),
+      ]),
     ]),
     el("div", { class: "filtros" }, [
       seg("Ajuste", [["semanal", "Semanal"], ["quincenal", "Quincenal"]], ui.modo, (v) => { ui.modo = v; re(); }),
@@ -155,6 +162,23 @@ function detalle(f, esc) {
       f.mp_pvp_hist ? `MP/PVP real últimos 3 meses: ${pct(f.mp_pvp_hist, false)} (margen ${pct(1 - f.mp_pvp_hist, false)}, ${f.n_ordenes_hist} órdenes).` : "Sin órdenes en los últimos 3 meses para medir el margen real.",
     ]),
   ]);
+}
+
+// Sin proceso automático (no hay permisos de aplicación), Sistemas corre
+// extraer_recetas.py en su equipo y sube aquí el recetas.json resultante.
+async function actualizarRecetas(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const txt = await f.text();
+    const d = JSON.parse(txt);
+    if (!d.productos || !d.ventas) throw new Error("no es un recetas.json válido");
+    await datos.subirRecetas(txt);
+    toast(`Datos de Odoo actualizados (${d.generado})`);
+    setTimeout(() => location.reload(), 900);
+  } catch (err) {
+    toast("No se pudo actualizar: " + err.message, "err");
+  }
 }
 
 function kpi(t, v, s, cls = "") {
