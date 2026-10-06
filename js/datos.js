@@ -135,7 +135,14 @@ const sp = {
         if (e.status !== 404) throw e;
       }
       const titulo = CONFIG.sp.listas[k].split("/").pop();
-      await post(`${SITE}/_api/web/lists`, { Title: titulo, BaseTemplate: 100, Description: "Hub Precios Fruta" });
+      try {
+        await post(`${SITE}/_api/web/lists`, { Title: titulo, BaseTemplate: 100, Description: "Hub Precios Fruta" });
+      } catch (e) {
+        // AllSites.Write deja escribir ítems pero no crear listas (eso es AllSites.Manage):
+        // las listas se crean una sola vez desde SharePoint (ver README).
+        if (e.status === 403) throw new Error(`Falta la lista "${titulo}" en EspacioColaborativo y esta app no tiene permiso para crearla. Avisa a sistemasdegestion@healthyfood.com.ec.`);
+        throw e;
+      }
       for (const [n, tipo] of campos)
         await post(`${lista(k)}/fields/CreateFieldAsXml`, { parameters: { SchemaXml: `<Field Type="${tipo}" DisplayName="${n}" Name="${n}" StaticName="${n}" />`, Options: 8 } });
     }
