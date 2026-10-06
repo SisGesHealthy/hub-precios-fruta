@@ -119,11 +119,9 @@ const ESQUEMA = {
 };
 const post = (url, body) => spFetch(url, { method: "POST", headers: { "Content-Type": NM }, body: JSON.stringify(body) });
 
-async function carpetaDatos() {
-  // biblioteca predeterminada del sitio (la misma "drive" que usa Graph en Python)
-  const r = await (await spFetch(`${SITE}/_api/web/DefaultDocumentLibrary()/RootFolder?$select=ServerRelativeUrl`)).json();
-  return `${r.ServerRelativeUrl}/${CONFIG.sp.carpetaDatos}`;
-}
+// Biblioteca "Documentos" del sitio (URL "Documentos compartidos"): es la "drive"
+// predeterminada que usa Graph en Python (sharepoint.subir_archivo).
+const carpetaDatos = async () => CONFIG.sp.carpetaDatos;
 
 const sp = {
   async preparar() {

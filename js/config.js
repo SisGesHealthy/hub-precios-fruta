@@ -30,7 +30,7 @@ export const CONFIG = {
     },
     // recetas.json vive en <biblioteca predeterminada>/PreciosFruta/; la sube el proceso
     // del lunes (extraer_recetas.py --sharepoint) o, de respaldo, Sistemas desde la app.
-    carpetaDatos: "PreciosFruta",
+    carpetaDatos: "/sites/EspacioColaborativo/Documentos compartidos/PreciosFruta",
   },
 
   // Quién ve qué al entrar (todos pueden ver todo; esto solo elige la pantalla inicial
