@@ -70,6 +70,7 @@ export const CONFIG = {
     MP00221: { fruta: "FRUTILLA DESPITONADA PARA PICAR", opcional: true },
     MP00154: { fruta: "FRUTILLA DESPITONADA PARA TOPPING", opcional: true },
     MP00005: { fruta: "COCO", opcional: true },
+    MP00234: { fruta: "COCO BLANQUEADO", opcional: true }, // crema de coco
     MP00034: { fruta: "ARANDANO", opcional: true },
     MP00030: { fruta: "LIMON MEYER", opcional: true },
     MP00024: { fruta: "CONCENTRADO DE GUAYABA", opcional: true },
@@ -86,8 +87,8 @@ export const CONFIG = {
   clientesPersonal: ["GONZALEZ GUARDERAS JOSE MIGUEL", "PEREZ JACOME NATHALY SOLEDAD"],
 
   divisionesCliente: [
-    { cliente: "PROBA", patron: "250 ?G", nombre: "PROBA USA" },
-    { cliente: "PROBA", nombre: "PROBA UE" },
+    { cliente: "PROBA", patron: "250 ?G", nombre: "PROBA UE" }, // presentaciones GOYA UE
+    { cliente: "PROBA", nombre: "PROBA USA" },
   ],
   // Alerta al cargar: cambio de una semana a otra mayor a esto pide confirmar (¿error de tipeo?)
   saltoSospechoso: 0.3,
