@@ -1,10 +1,10 @@
 // Capa de datos: la misma interfaz en modo demo (localStorage) y en SharePoint.
 //
-//   semanas(n)                 → [{semana, cargado_por, fecha, frutas:{FRUTA:{presupuesto,actual,maximo,nota}}}] (nueva primero)
+//   semanas(n)                 → [{semana, cargado_por, fecha, frutas:{FRUTA:{presupuesto,actual,maximo,nota,comprado}}}] (nueva primero)
 //   guardarSemana(sem, frutas, usuario)
 //   recetas()                  → {generado, productos:{code:{...}}, ventas:[...]}
-//   aprobados()                → {"code|cliente_id": {Semana, PrecioU, PrecioKg, RefFrutas, ...}} (último por fila)
-//   aprobar(filas, semana, refFrutas, usuario)
+//   aprobados()                → [{Producto, ClienteId, Semana, PrecioU, PrecioKg, RefFrutas, ...}] (todos: es el histórico de pactados)
+//   aprobar(filas, semana, refFrutas, usuario)   filas: [{code, cliente, cliente_id, precioU, precioKg}]
 //   preparar()                 → crea las listas si no existen (solo SharePoint)
 //   subirRecetas(texto)        → sube recetas.json (respaldo mientras el proceso del lunes no tenga permisos)
 
@@ -15,18 +15,12 @@ const agrupar = (items) => {
   for (const f of items) {
     const s = (por[f.Title] ||= { semana: f.Title, frutas: {}, cargado_por: f.CargadoPor || "", fecha: f.Modified || "" });
     if ((f.Modified || "") > s.fecha) s.fecha = f.Modified;
-    s.frutas[f.Fruta] = { presupuesto: +f.Presupuesto, actual: +f.Actual, maximo: +f.Maximo, nota: f.Nota || "" };
+    s.frutas[f.Fruta] = { presupuesto: +f.Presupuesto, actual: +f.Actual, maximo: +f.Maximo, nota: f.Nota || "", comprado: !!f.Comprado };
   }
   return Object.values(por).sort((a, b) => (a.semana < b.semana ? 1 : -1));
 };
-const ultimoAprobado = (items) => {
-  const out = {};
-  for (const f of items) {
-    const k = `${f.Producto}|${f.ClienteId}`;
-    if (!out[k] || f.Semana >= out[k].Semana) out[k] = f;
-  }
-  return out;
-};
+const itemSemana = (semana, f, v, usuario) =>
+  ({ Title: semana, Fruta: f, Presupuesto: v.presupuesto, Actual: v.actual, Maximo: v.maximo, Nota: v.nota || "", Comprado: !!v.comprado, CargadoPor: usuario });
 
 // ------------------------------------------------------------------ demo ----
 const LS = "hub-precios-fruta:demo:";
@@ -49,7 +43,7 @@ const demo = {
     const ahora = new Date().toISOString();
     const items = lsGet("semanal", []).filter((i) => i.Title !== semana);
     for (const [f, v] of Object.entries(frutas))
-      items.push({ Title: semana, Fruta: f, Presupuesto: v.presupuesto, Actual: v.actual, Maximo: v.maximo, Nota: v.nota || "", CargadoPor: usuario, Modified: ahora });
+      items.push({ ...itemSemana(semana, f, v, usuario), Modified: ahora });
     lsSet("semanal", items);
   },
   async recetas() {
@@ -61,10 +55,11 @@ const demo = {
     }
     throw new Error("No hay recetas cargadas.");
   },
-  async aprobados() { return ultimoAprobado(lsGet("aprobados", [])); },
+  async aprobados() { return lsGet("aprobados", []); },
   async aprobar(filas, semana, refFrutas, usuario) {
     const items = lsGet("aprobados", []);
-    for (const f of filas) items.push(itemAprobado(f, semana, refFrutas, usuario));
+    const ahora = new Date().toISOString();
+    for (const f of filas) items.push({ ...itemAprobado(f, semana, refFrutas, usuario), Created: ahora });
     lsSet("aprobados", items);
   },
 };
@@ -72,7 +67,7 @@ const demo = {
 function itemAprobado(f, semana, refFrutas, usuario) {
   return {
     Title: `${f.code}|${f.cliente_id}`, Producto: f.code, Cliente: f.cliente, ClienteId: f.cliente_id, Semana: semana,
-    PrecioU: f.precioU, PrecioKg: f.precioKg, Estado: "Aplicado", AprobadoPor: usuario, RefFrutas: JSON.stringify(refFrutas),
+    PrecioU: f.precioU, PrecioKg: f.precioKg, Estado: "Pactado", AprobadoPor: usuario, RefFrutas: JSON.stringify(refFrutas),
   };
 }
 
@@ -117,7 +112,7 @@ const crear = (k, item) => spFetch(`${lista(k)}/items`, { method: "POST", header
 // Columnas de las listas (nombre interno = nombre visible, sin espacios). Igual que
 // sharepoint.crear_listas() en Python.
 const ESQUEMA = {
-  semanal: [["Fruta", "Text"], ["Presupuesto", "Number"], ["Actual", "Number"], ["Maximo", "Number"], ["CargadoPor", "Text"], ["Nota", "Text"]],
+  semanal: [["Fruta", "Text"], ["Presupuesto", "Number"], ["Actual", "Number"], ["Maximo", "Number"], ["CargadoPor", "Text"], ["Nota", "Text"], ["Comprado", "Boolean"]],
   aprobados: [["Producto", "Text"], ["Cliente", "Text"], ["ClienteId", "Number"], ["Semana", "Text"], ["PrecioU", "Number"], ["PrecioKg", "Number"],
     ["Estado", "Text"], ["AprobadoPor", "Text"], ["RefFrutas", "Note"]],
 };
@@ -126,6 +121,9 @@ const post = (url, body) => spFetch(url, { method: "POST", headers: { "Content-T
 // Biblioteca "Documentos" del sitio (URL "Documentos compartidos"): es la "drive"
 // predeterminada que usa Graph en Python (sharepoint.subir_archivo).
 const carpetaDatos = async () => CONFIG.sp.carpetaDatos;
+
+let sinComprado = false; // la lista aún no tiene la columna Comprado
+export const faltaColumnaComprado = () => sinComprado;
 
 const sp = {
   async preparar() {
@@ -157,17 +155,28 @@ const sp = {
   },
   async semanas(n = 12) { return agrupar(await leerTodo("semanal")).slice(0, n); },
   async guardarSemana(semana, frutas, usuario) {
-    // reemplaza la semana completa (si Compras corrige, no quedan filas viejas)
+    // reemplaza la semana completa (si Compras corrige, no quedan filas viejas). Primero
+    // se crean las nuevas y recién después se borran las viejas: si algo falla a medias
+    // no se pierde la semana.
     const viejos = (await leerTodo("semanal")).filter((i) => i.Title === semana);
+    const filas = Object.entries(frutas).map(([f, v]) => itemSemana(semana, f, v, usuario));
+    try {
+      await crear("semanal", filas[0]);
+    } catch (e) {
+      // lista creada antes de existir la columna "Comprado": se guarda sin ella
+      if (!/Comprado/.test(e.message)) throw e;
+      filas.forEach((x) => delete x.Comprado);
+      sinComprado = true;
+      await crear("semanal", filas[0]);
+    }
+    await Promise.all(filas.slice(1).map((x) => crear("semanal", x)));
     await Promise.all(viejos.map((i) => spFetch(`${lista("semanal")}/items(${i.ID})`, { method: "POST", headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": "*" } })));
-    await Promise.all(Object.entries(frutas).map(([f, v]) =>
-      crear("semanal", { Title: semana, Fruta: f, Presupuesto: v.presupuesto, Actual: v.actual, Maximo: v.maximo, Nota: v.nota || "", CargadoPor: usuario })));
   },
   async recetas() {
     const r = await spFetch(`${SITE}/_api/web/GetFileByServerRelativeUrl('${encodeURIComponent((await carpetaDatos()) + "/recetas.json")}')/$value`);
     return r.json();
   },
-  async aprobados() { return ultimoAprobado(await leerTodo("aprobados")); },
+  async aprobados() { return leerTodo("aprobados"); },
   async aprobar(filas, semana, refFrutas, usuario) {
     await Promise.all(filas.map((f) => crear("aprobados", itemAprobado(f, semana, refFrutas, usuario))));
   },

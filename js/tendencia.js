@@ -23,6 +23,8 @@ export function vistaTendencia(root) {
     el("span", {}, [el("i", { class: "sw actual" }), "Actual"]),
     el("span", {}, [el("i", { class: "sw maximo" }), "Máximo esperado"]),
     el("span", {}, [el("i", { class: "sw presup" }), "Presupuesto"]),
+    el("span", {}, [el("i", { class: "sw lleno" }), "Semana comprada"]),
+    el("span", {}, [el("i", { class: "sw hueco" }), "No se compró"]),
   ]));
   const frutas = Object.keys(sems[sems.length - 1].frutas).sort();
   const tip = el("div", { class: "tip hidden", role: "tooltip" });
@@ -60,7 +62,8 @@ function mini(fruta, sems, tip) {
   };
   linea("maximo", "l-maximo");
   linea("actual", "l-actual");
-  pts.forEach((p, i) => p && s.appendChild(svg("circle", { cx: x(i), cy: y(p.actual), r: i === pts.length - 1 ? 4 : 2.5, class: "p-actual" })));
+  // punto lleno = esa semana sí se compró; hueco = solo precio de referencia
+  pts.forEach((p, i) => p && s.appendChild(svg("circle", { cx: x(i), cy: y(p.actual), r: i === pts.length - 1 ? 4 : 3, class: p.comprado ? "p-actual" : "p-hueco" })));
 
   // capa de hover: una franja por semana (objetivo más grande que el punto)
   const cross = svg("line", { y1: P.t, y2: H - P.b, class: "cross hidden" });
@@ -71,7 +74,7 @@ function mini(fruta, sems, tip) {
     const r = svg("rect", { x: x(i) - ancho / 2, y: 0, width: ancho, height: H, fill: "transparent" });
     r.addEventListener("mouseenter", (e) => {
       cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.classList.remove("hidden");
-      tip.innerHTML = `<b>${titulo(fruta)} · ${semanaCorta(sems[i].semana)}</b><br>Actual ${usd(p.actual)}<br>Máximo ${usd(p.maximo)}<br>Presupuesto ${usd(p.presupuesto)}`;
+      tip.innerHTML = `<b>${titulo(fruta)} · ${semanaCorta(sems[i].semana)}</b><br>Actual ${usd(p.actual)}${p.comprado ? " · comprada" : " · no se compró"}<br>Máximo ${usd(p.maximo)}<br>Presupuesto ${usd(p.presupuesto)}`;
       tip.classList.remove("hidden");
     });
     r.addEventListener("mousemove", (e) => { tip.style.left = e.clientX + 14 + "px"; tip.style.top = e.clientY + 14 + "px"; });

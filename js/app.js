@@ -25,7 +25,7 @@ export const puedeAprobar = () =>
   CONFIG.useMock || [...CONFIG.roles.gerencia, ...CONFIG.roles.admin].includes(estado.usuario?.correo);
 
 export async function recargar() {
-  const [semanas, aprobados] = await Promise.all([datos.semanas(12), datos.aprobados()]);
+  const [semanas, aprobados] = await Promise.all([datos.semanas(104), datos.aprobados()]); // 2 años de historial
   estado.semanas = semanas;
   estado.aprobados = aprobados;
 }

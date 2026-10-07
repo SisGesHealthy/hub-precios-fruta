@@ -1,9 +1,9 @@
 // Configuración de Hub Precios Fruta.
 //
 // Compras carga el precio semanal de la fruta (viernes); la app calcula a qué
-// precio hay que llevar a cada cliente para sostener el margen de aportación,
-// y el lunes 06:30 un proceso en GitHub Actions (guardian_inventario /
-// precios-fruta/tarea_semanal.py) envía el correo a Gerencia.
+// precio hay que llevar a cada cliente para sostener el margen de aportación y
+// Gerencia registra el precio pactado. Sin correos (no hay permisos de aplicación):
+// todo se consulta en la app.
 //
 // useMock: true  → modo demo: datos en el navegador, recetas de ejemplo
 //                  (data/recetas.json si existe en local, si no las anónimas).
@@ -28,8 +28,8 @@ export const CONFIG = {
       semanal: "Lists/PreciosFrutaSemanal", // una fila por fruta por semana
       aprobados: "Lists/PreciosClienteAprobados", // precios aprobados por producto×cliente
     },
-    // recetas.json vive en <biblioteca predeterminada>/PreciosFruta/; la sube el proceso
-    // del lunes (extraer_recetas.py --sharepoint) o, de respaldo, Sistemas desde la app.
+    // recetas.json (datos de Odoo): lo genera Sistemas con Actualizar_datos_Odoo.bat y
+    // lo sube desde la app (botón "Actualizar datos de Odoo").
     carpetaDatos: "/sites/EspacioColaborativo/Documentos compartidos/PreciosFruta",
   },
 
@@ -78,7 +78,14 @@ export const CONFIG = {
   },
 
   // igual que PARAMS en precios-fruta/config.py
-  params: { modo: "semanal", umbral_cambio: 0.01, mp_pvp_politica: 0.55, solo_empresas: true, min_kg_mes: 50, tolerancia_precio: 0.02 },
+  params: { modo: "semanal", umbral_cambio: 0.01, mp_pvp_politica: 0.55, solo_empresas: true, min_kg_mes: 0, tolerancia_precio: 0.02 },
+
+  // Un cliente de Odoo que comercialmente son dos. Se aplica la primera regla que
+  // calza (cliente contiene `cliente` y, si hay `patron`, el nombre del producto lo cumple).
+  divisionesCliente: [
+    { cliente: "PROBA", patron: "250 ?G", nombre: "PROBA USA" },
+    { cliente: "PROBA", nombre: "PROBA UE" },
+  ],
   // Alerta al cargar: cambio de una semana a otra mayor a esto pide confirmar (¿error de tipeo?)
   saltoSospechoso: 0.3,
 };

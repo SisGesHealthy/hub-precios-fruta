@@ -6,7 +6,7 @@
   --bg: #f5f7f0; --ink: #1d2318; --dim: #6b7562; --card: #ffffff; --border: #e3e8d9;
   --verde: #4f8a2b; --rojo: #b3261e; --ambar: #9a6700; --azul: #3a63c4;
   --ok-bg: #e5f2da; --err-bg: #fbe4e1; --warn-bg: #fdf1dc;
-  --serie-actual: #5f7a2e; --serie-maximo: #3a63c4; --guia: #9aa38f;
+  --serie-actual: #5f7a2e; --serie-maximo: #3a63c4; --serie-pactado: #c2410c; --guia: #9aa38f;
   --radius: 14px; --shadow: 0 1px 2px rgba(30, 40, 20, .06), 0 6px 18px rgba(30, 40, 20, .06);
 }
 @media (prefers-color-scheme: dark) {
@@ -14,7 +14,7 @@
     --bg: #14180f; --ink: #eef2e6; --dim: #a3ad97; --card: #20271a; --border: #333d29;
     --brand-50: #263020; --ok-bg: #22361a; --err-bg: #3d1d1a; --warn-bg: #3a2e16;
     --rojo: #ef8a80; --ambar: #e0b25c; --verde: #8fc06a;
-    --serie-actual: #7f9c48; --serie-maximo: #6b8de6; --guia: #6f7866;
+    --serie-actual: #7f9c48; --serie-maximo: #6b8de6; --serie-pactado: #d9773a; --guia: #6f7866;
     --shadow: 0 6px 18px rgba(0, 0, 0, .35);
   }
 }
@@ -153,3 +153,28 @@ a { color: inherit; text-decoration: none; }
 .toast.err { background: var(--err-bg); color: var(--rojo); }
 .toast.fuera { opacity: 0; }
 @media (max-width: 600px) { .vista { padding: 14px 16px 90px; } .barra { padding: 8px 16px; } .titulo { font-size: 20px; } }
+
+/* navegación por semana, pactado, historial del producto */
+.nav-sem { display: inline-flex; align-items: center; gap: 4px; }
+.btn-nav { border: 1px solid var(--border); background: var(--card); border-radius: 8px; width: 30px; height: 30px; font-size: 18px; line-height: 1; color: var(--ink); }
+.btn-nav:disabled { opacity: .35; cursor: default; }
+.mini.pactado { color: var(--serie-pactado); font-weight: 700; }
+.det-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; margin-bottom: 12px; }
+.det h3 { font-size: 13px; margin: 2px 0 6px; }
+.pacto-form { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 6px; }
+.pacto-form label { display: flex; flex-direction: column; font-size: 12px; color: var(--dim); gap: 4px; }
+.in-pactado { width: 110px; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; text-align: right; background: var(--card); }
+.spark.hist { max-width: 640px; }
+.spark .l-fact { fill: none; stroke: var(--ink); stroke-width: 1.5; opacity: .55; }
+.spark .p-fact { fill: var(--ink); opacity: .7; }
+.spark .p-maximo { fill: var(--serie-maximo); stroke: var(--card); stroke-width: 1.5; }
+.spark .p-pactado { fill: var(--serie-pactado); stroke: var(--card); stroke-width: 1.5; }
+.spark .p-hueco { fill: var(--card); stroke: var(--serie-actual); stroke-width: 1.5; }
+.sw.fact { border-color: var(--ink); opacity: .55; }
+.sw.pactado { width: 10px; height: 10px; border: 0; background: var(--serie-pactado); transform: rotate(45deg); }
+.sw.hueco { width: 9px; height: 9px; border: 1.5px solid var(--serie-actual); border-radius: 50%; }
+.sw.lleno { width: 9px; height: 9px; border: 0; background: var(--serie-actual); border-radius: 50%; }
+@media (max-width: 900px) { .det-grid { grid-template-columns: minmax(0, 1fr); } }
+.centro { text-align: center; }
+.chk-comprado { width: 18px; height: 18px; accent-color: var(--brand); cursor: pointer; }
+.leyenda { flex-wrap: wrap; }

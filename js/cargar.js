@@ -8,7 +8,7 @@
 // sin precio actual no se guarda y ese ingrediente queda a su costo de Odoo.
 import { CONFIG } from "./config.js";
 import { el, clear, toast } from "./dom.js";
-import { datos } from "./datos.js";
+import { datos, faltaColumnaComprado } from "./datos.js";
 import { estado, recargar, esCompras } from "./app.js";
 import { calcularFilas } from "./calculo.js";
 import { semanaObjetivo, rangoSemana, semanaCorta, normFruta, titulo, usd, pct, leerNum, claseDelta } from "./util.js";
@@ -30,7 +30,6 @@ function costosOdoo() {
 
 export function vistaCargar(root) {
   const obj = semanaObjetivo().semana;
-  const existentes = estado.semanas.map((s) => s.semana);
   let semana = obj;
   let borrador = [];
 
@@ -52,8 +51,8 @@ export function vistaCargar(root) {
     borrador = [...FRUTAS_MAPEADAS, ...extra].map((f) => {
       const v = base?.frutas[f];
       if (v) // semana nueva: llega con los valores de la anterior, Compras solo cambia lo que se movió
-        return { fruta: f, presupuesto: v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "" };
-      return { fruta: f, presupuesto: odoo[f] != null ? Math.round(odoo[f] * 1000) / 1000 : null, actual: null, maximo: null, nota: "" };
+        return { fruta: f, presupuesto: v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "", comprado: actual ? !!v.comprado : false };
+      return { fruta: f, presupuesto: odoo[f] != null ? Math.round(odoo[f] * 1000) / 1000 : null, actual: null, maximo: null, nota: "", comprado: false };
     });
     pintar();
   }
@@ -61,23 +60,27 @@ export function vistaCargar(root) {
   function pintarCab() {
     clear(cab);
     const ya = estado.semanas.find((s) => s.semana === semana);
-    const opciones = [...new Set([obj, ...existentes])].sort().reverse();
+    const opciones = [...new Set([obj, ...estado.semanas.map((x) => x.semana)])].sort().reverse();
+    const i = opciones.indexOf(semana);
+    const ir = (w) => { semana = w; iniciar(); };
     cab.append(
       el("div", {}, [
         el("h1", { class: "titulo" }, "Precio semanal de la fruta"),
         el("p", { class: "sub" }, [
-          "Semana ",
-          el("select", { class: "sel-semana", onchange: (e) => { semana = e.target.value; iniciar(); } },
-            opciones.map((s) => el("option", { value: s, selected: s === semana }, `${semanaCorta(s)} · ${rangoSemana(s)}`))),
-          " · ",
+          el("span", { class: "nav-sem" }, [
+            el("button", { class: "btn-nav", title: "Semana anterior", "aria-label": "Semana anterior", disabled: i >= opciones.length - 1, onclick: () => ir(opciones[i + 1]) }, "‹"),
+            el("select", { class: "sel-semana", "aria-label": "Semana", onchange: (e) => ir(e.target.value) },
+              opciones.map((w) => el("option", { value: w, selected: w === semana }, `${semanaCorta(w)} · ${rangoSemana(w)}`))),
+            el("button", { class: "btn-nav", title: "Semana siguiente", "aria-label": "Semana siguiente", disabled: i <= 0, onclick: () => ir(opciones[i - 1]) }, "›"),
+          ]),
           ya ? el("span", { class: "chip ok" }, `Cargada por ${ya.cargado_por.split("@")[0]} · ${new Date(ya.fecha).toLocaleString("es-EC", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`)
-             : el("span", { class: "chip pend" }, "Pendiente · el lunes 06:30 sale el correo a Gerencia"),
+             : el("span", { class: "chip pend" }, "Pendiente de cargar"),
         ]),
       ]),
       el("div", { class: "acciones" }, [
         el("button", { class: "btn btn-sec", onclick: descargarPlantilla, title: "Excel con todas las frutas, para llenar y subir" }, "Descargar plantilla"),
         el("label", { class: "btn btn-sec" }, ["Subir Excel", el("input", { type: "file", accept: ".xlsx,.xls,.csv", class: "hidden", onchange: subirExcel })]),
-        el("button", { class: "btn btn-sec", onclick: () => { borrador.push({ fruta: "", presupuesto: null, actual: null, maximo: null, nota: "" }); pintar(); tbody.querySelector("tr:last-child input")?.focus(); } }, "Agregar fruta"),
+        el("button", { class: "btn btn-sec", onclick: () => { borrador.push({ fruta: "", presupuesto: null, actual: null, maximo: null, nota: "", comprado: false }); pintar(); tbody.querySelector("tr:last-child input")?.focus(); } }, "Agregar fruta"),
         btnGuardar,
       ])
     );
@@ -102,13 +105,15 @@ export function vistaCargar(root) {
     borrador.forEach((r, i) => {
       if (!separador && OPCIONALES.has(r.fruta)) {
         separador = true;
-        tbody.appendChild(el("tr", { class: "sep" }, el("td", { colspan: 8 }, [el("b", {}, "Otras frutas e insumos"),
+        tbody.appendChild(el("tr", { class: "sep" }, el("td", { colspan: 9 }, [el("b", {}, "Otras frutas e insumos"),
           " · llenar solo si su precio cambió; vacías quedan a su costo de Odoo (el presupuesto sugerido es ese costo)"])));
       }
       const tr = el("tr", { class: OPCIONALES.has(r.fruta) ? "opc" : "" }, [
         el("td", {}, el("input", { class: "in-fruta", value: titulo(r.fruta), list: "frutas-conocidas", "aria-label": "Fruta",
           onchange: (e) => { r.fruta = normFruta(e.target.value); pintarDeltas(); } })),
         celdaNum(r, "presupuesto"), celdaNum(r, "actual"), celdaNum(r, "maximo"),
+        el("td", { class: "centro" }, el("input", { type: "checkbox", class: "chk-comprado", checked: r.comprado, "aria-label": `Comprado ${r.fruta}`,
+          title: "Marcar si esta fruta sí se compró esta semana", onchange: (e) => (r.comprado = e.target.checked) })),
         el("td", { class: "num d-sem" }), el("td", { class: "num d-pre" }),
         el("td", {}, el("input", { class: "in-nota", value: r.nota, placeholder: "—", "aria-label": "Nota", oninput: (e) => (r.nota = e.target.value) })),
         el("td", {}, el("button", { class: "btn-x", title: "Quitar fila", "aria-label": "Quitar fila", onclick: () => { borrador.splice(i, 1); pintar(); } }, "×")),
@@ -157,7 +162,7 @@ export function vistaCargar(root) {
     const frutas = {};
     // solo las filas con precio actual; sin máximo esperado → el mismo actual
     for (const r of borrador)
-      if (r.fruta && r.actual != null) frutas[r.fruta] = { presupuesto: r.presupuesto, actual: r.actual, maximo: r.maximo ?? r.actual, nota: r.nota };
+      if (r.fruta && r.actual != null) frutas[r.fruta] = { presupuesto: r.presupuesto, actual: r.actual, maximo: r.maximo ?? r.actual, nota: r.nota, comprado: !!r.comprado };
     return { semana, frutas };
   }
 
@@ -190,17 +195,18 @@ export function vistaCargar(root) {
       const cab = row.map((c) => normFruta(c));
       if (cab.includes("FRUTA")) {
         const busca = (rx) => cab.findIndex((c) => rx.test(c) && !c.includes("VARIACION"));
-        col = { fruta: cab.indexOf("FRUTA"), presupuesto: busca(/PRESUP/), actual: busca(/ACTUAL/), maximo: busca(/MAXIMO/) };
+        col = { fruta: cab.indexOf("FRUTA"), presupuesto: busca(/PRESUP/), actual: busca(/ACTUAL/), maximo: busca(/MAXIMO/), comprado: busca(/COMPRAD/) };
         continue;
       }
       const nombre = normFruta(row[col.fruta]);
       const num = (k) => (col[k] >= 0 ? leerNum(row[col[k]]) : null);
       if (!nombre || num("actual") == null) continue; // fila sin precio actual = no se movió
       let r = borrador.find((b) => b.fruta === nombre);
-      if (!r) borrador.push((r = { fruta: nombre, nota: "" }));
+      if (!r) borrador.push((r = { fruta: nombre, nota: "", comprado: false }));
       r.presupuesto = num("presupuesto") ?? r.presupuesto;
       r.actual = num("actual");
       r.maximo = num("maximo");
+      if (col.comprado >= 0) r.comprado = /^(SI|SÍ|X|1|TRUE|VERDADERO)$/i.test(String(row[col.comprado] ?? "").trim());
       n++;
     }
     pintar();
@@ -225,17 +231,17 @@ export function vistaCargar(root) {
 
   // Misma forma que el Excel de Compras + todas las frutas de Odoo y su código.
   function descargarPlantilla() {
-    const filas = [["FRUTA", "Precio Presupuesto", "PRECIO ACTUAL", "PRECIO MAXIMO ESPERADO", "", "% VARIACION ACTUAL", "% VARIACION MAXIMO", "CODIGO ODOO", "TIPO"]];
+    const filas = [["FRUTA", "Precio Presupuesto", "PRECIO ACTUAL", "PRECIO MAXIMO ESPERADO", "COMPRADO (SI/NO)", "% VARIACION ACTUAL", "% VARIACION MAXIMO", "CODIGO ODOO", "TIPO"]];
     const codigos = {};
     for (const [c, m] of Object.entries(CONFIG.mapeo)) (codigos[m.fruta] ||= []).push(c);
-    borrador.forEach((r) => filas.push([r.fruta, r.presupuesto ?? "", r.actual ?? "", r.maximo ?? "", "", "", "", (codigos[r.fruta] || []).join(", "),
+    borrador.forEach((r) => filas.push([r.fruta, r.presupuesto ?? "", r.actual ?? "", r.maximo ?? "", r.comprado ? "SI" : "", "", "", (codigos[r.fruta] || []).join(", "),
       OPCIONALES.has(r.fruta) ? "opcional: llenar solo si cambió" : "semanal"]));
     const ws = XLSX.utils.aoa_to_sheet(filas);
     for (let i = 2; i <= filas.length; i++) {
       ws["F" + i] = { t: "n", f: `IF(AND(B${i}>0,C${i}<>""),(C${i}-B${i})/B${i},"")`, z: "0.0%" };
       ws["G" + i] = { t: "n", f: `IF(AND(B${i}>0,D${i}<>""),(D${i}-B${i})/B${i},"")`, z: "0.0%" };
     }
-    ws["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 15 }, { wch: 24 }, { wch: 3 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 30 }];
+    ws["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 15 }, { wch: 24 }, { wch: 17 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 30 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Reporte semanal");
     XLSX.writeFile(wb, `Precio_Fruta_${semanaCorta(semana)}.xlsx`);
@@ -251,7 +257,8 @@ export function vistaCargar(root) {
     try {
       await datos.guardarSemana(semana, s.frutas, estado.usuario.correo);
       await recargar();
-      toast(`Semana ${semanaCorta(semana)} guardada. Gerencia la recibe el lunes 06:30.`);
+      toast(faltaColumnaComprado() ? `Semana ${semanaCorta(semana)} guardada (sin "Comprado": falta la columna en SharePoint, avisa a Sistemas)`
+        : `Semana ${semanaCorta(semana)} guardada. Ya la ve Gerencia en Precios por cliente.`, faltaColumnaComprado() ? "err" : "ok");
       pintarCab();
     } catch (err) {
       toast("No se pudo guardar: " + err.message, "err");
@@ -262,13 +269,13 @@ export function vistaCargar(root) {
   }
 
   const tabla = el("table", { class: "tabla tabla-carga", onpaste: onPaste }, [
-    el("thead", {}, el("tr", {}, ["Fruta", "Presupuesto", "Actual", "Máx. esperado", "vs sem. ant.", "vs presup.", "Nota", ""].map((h, i) =>
-      el("th", { class: i > 0 && i < 6 ? "num" : "" }, h)))),
+    el("thead", {}, el("tr", {}, ["Fruta", "Presupuesto", "Actual", "Máx. esperado", "Comprado", "vs sem. ant.", "vs presup.", "Nota", ""].map((h, i) =>
+      el("th", { class: i === 4 ? "centro" : i > 0 && i < 7 ? "num" : "" }, h)))),
     tbody,
   ]);
   root.append(
     cab,
-    el("p", { class: "nota" }, "Precios en $/kg. Copia el rango de tu Excel con su fila de encabezados y pégalo con Ctrl+V sobre la tabla, o súbelo con «Subir Excel». Si el máximo esperado queda vacío se toma el actual."),
+    el("p", { class: "nota" }, "Precios en $/kg. Copia el rango de tu Excel con su fila de encabezados y pégalo con Ctrl+V sobre la tabla, o súbelo con «Subir Excel». Si el máximo esperado queda vacío se toma el actual. Marca «Comprado» en las frutas que sí se compraron esta semana."),
     avisos,
     el("div", { class: "grid-carga" }, [el("div", { class: "card scroll" }, tabla), panelImpacto]),
     el("datalist", { id: "frutas-conocidas" }, FRUTAS_MAPEADAS.map((f) => el("option", { value: titulo(f) })))
