@@ -82,6 +82,9 @@ export const CONFIG = {
 
   // Un cliente de Odoo que comercialmente son dos. Se aplica la primera regla que
   // calza (cliente contiene `cliente` y, si hay `patron`, el nombre del producto lo cumple).
+  // Personas naturales marcadas como empresa en Odoo: se tratan como ventas al personal.
+  clientesPersonal: ["GONZALEZ GUARDERAS JOSE MIGUEL", "PEREZ JACOME NATHALY SOLEDAD"],
+
   divisionesCliente: [
     { cliente: "PROBA", patron: "250 ?G", nombre: "PROBA USA" },
     { cliente: "PROBA", nombre: "PROBA UE" },

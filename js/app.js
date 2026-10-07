@@ -12,7 +12,7 @@ export const estado = { usuario: null, semanas: [], recetas: null, aprobados: {}
 const RUTAS = {
   cargar: { t: "Cargar semana", f: vistaCargar },
   precios: { t: "Precios por cliente", f: vistaPrecios },
-  tendencia: { t: "Tendencia de la fruta", f: vistaTendencia },
+  tendencia: { t: "Tendencias", f: vistaTendencia },
 };
 const DEMO_USUARIOS = [
   ["Compras", "compras@healthyfood.com.ec"],
@@ -30,7 +30,27 @@ export async function recargar() {
   estado.aprobados = aprobados;
 }
 
+// Versión publicada (version.json). Si la app abierta es más vieja (caché del navegador o
+// del service worker), borra la caché y recarga UNA vez. Subir este número en cada publicación.
+const VERSION = 8;
+async function asegurarVersion() {
+  if (CONFIG.useMock && location.hostname === "localhost") return;
+  try {
+    const v = (await (await fetch("version.json", { cache: "no-store" })).json()).version;
+    const k = "hub-precios-fruta:recargado";
+    if (v > VERSION && sessionStorage.getItem(k) !== String(v)) {
+      sessionStorage.setItem(k, String(v));
+      if ("caches" in window) for (const c of await caches.keys()) await caches.delete(c);
+      const regs = (await navigator.serviceWorker?.getRegistrations?.()) || [];
+      await Promise.all(regs.map((r) => r.unregister()));
+      location.reload();
+      return true;
+    }
+  } catch {}
+}
+
 async function main() {
+  if (await asegurarVersion()) return;
   if (CONFIG.useMock) {
     const c = localStorage.getItem("hub-precios-fruta:demoUser") || DEMO_USUARIOS[0][1];
     const u = DEMO_USUARIOS.find((x) => x[1] === c) || DEMO_USUARIOS[0];

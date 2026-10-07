@@ -7,9 +7,10 @@ import { CONFIG } from "./config.js";
 import { el, clear, toast } from "./dom.js";
 import { datos } from "./datos.js";
 import { estado, recargar, puedeAprobar } from "./app.js";
-import { calcularFilas, historiaFila } from "./calculo.js";
+import { calcularFilas } from "./calculo.js";
+import { graficoHistoria } from "./historia.js";
 import { precioIngrediente } from "./motor.js";
-import { semanaObjetivo, rangoSemana, semanaCorta, titulo, usd, pct, num, claseDelta, leerNum, lunesDeSemana } from "./util.js";
+import { semanaObjetivo, rangoSemana, semanaCorta, titulo, usd, pct, num, claseDelta, leerNum } from "./util.js";
 
 const ui = { modo: CONFIG.params.modo, cliente: "", accion: "", q: "", personal: false, abierto: null, sel: new Set(), semana: null };
 
@@ -78,7 +79,7 @@ function pintar(cont) {
       kpi("Sobre política MP/PVP", `${filas.filter((f) => f.sobrePolitica).length}`, `aun ajustando (> ${(CONFIG.params.mp_pvp_politica * 100).toFixed(0)}%)`),
     ]),
     el("p", { class: "nota" }, [el("b", {}, "Posible"), " = mínimo para sostener el margen de aportación con el precio actual de la fruta. ",
-      el("b", {}, "Objetivo"), ` = a lo que se apunta: cubre el máximo esperado por Compras${ui.modo === "quincenal" ? " en las dos últimas semanas" : ""}. Precios por unidad de venta.`])
+      el("b", {}, "Objetivo"), ` = a lo que se apunta: cubre el máximo esperado por Compras${ui.modo === "quincenal" ? " en las dos últimas semanas" : ""}. Precios por unidad de venta. MP/PVP = materia prima ÷ precio que se sostiene. Clic en un producto para ver su historial de precio y registrar el pactado.`])
   );
 
   const porCli = {};
@@ -94,12 +95,13 @@ function pintar(cont) {
       const tr = el("tr", { class: "fila " + f.accion.toLowerCase(), onclick: (e) => { if (e.target.type === "checkbox") return; ui.abierto = ui.abierto === k ? null : k; re(); } }, [
         el("td", {}, puedeAprobar() ? el("input", { type: "checkbox", "aria-label": "Seleccionar", checked: ui.sel.has(k), onchange: (e) => { e.target.checked ? ui.sel.add(k) : ui.sel.delete(k); barraSel(); } }) : null),
         el("td", {}, [el("div", { class: "prod" }, [f.producto, f.sobrePolitica ? el("span", { class: "pol", title: "MP/PVP sobre política aun con el ajuste" }, " ● política") : null]),
-          el("div", { class: "mini" }, `${f.code} · ${f.frutas.map(titulo).join(", ")} · ref. ${f.ref}`)]),
+          el("div", { class: "mini" }, `${f.code} · ${f.frutas.map(titulo).join(", ")} · ref. ${f.ref} · ver historial ›`)]),
         el("td", { class: "num" }, [usd(f.pvpU), el("div", { class: "mini" }, f.pvp_fecha),
           f.pactado ? el("div", { class: "mini pactado", title: "Último precio pactado registrado" }, `pactado ${usd(+f.pactado.PrecioU)} · ${semanaCorta(f.pactado.Semana)}`) : null]),
         el("td", { class: "num" }, [el("b", {}, usd(f.posibleU)), el("div", { class: "delta " + claseDelta(f.dPos) }, pct(f.dPos))]),
         el("td", { class: "num" }, [el("b", {}, usd(f.objetivoU)), el("div", { class: "delta " + claseDelta(f.dObj) }, pct(f.dObj))]),
-        el("td", { class: "num" }, [pct(f.margen, false), el("div", { class: "mini" }, `sin ajuste ${pct(1 - f.mpPvpSinCambio, false)}`)]),
+        el("td", { class: "num" }, [el("span", { class: 1 - f.margen > CONFIG.params.mp_pvp_politica ? "rojo" : "" }, pct(1 - f.margen, false)),
+          el("div", { class: "mini", title: "MP/PVP si el cliente se queda en el precio vigente" }, `sin ajuste ${pct(f.mpPvpSinCambio, false)}`)]),
         el("td", { class: "num" }, num(f.kg_mes)),
         el("td", { class: "num" }, usd(f.impactoMes, 0)),
       ]);
@@ -109,7 +111,7 @@ function pintar(cont) {
     cont.appendChild(el("section", { class: "card cliente" }, [
       el("div", { class: "cli-cab" }, [el("h2", {}, cli), el("span", { class: "mini" }, `${fs[0].canal.toLowerCase()} · ${fs.length} productos · margen en juego ${usd(imp, 0)}/mes`)]),
       el("div", { class: "scroll" }, el("table", { class: "tabla" }, [
-        el("thead", {}, el("tr", {}, ["", "Producto", "Vigente", "Posible", "Objetivo", "Margen aport.", "kg/mes", "$/mes en juego"].map((h, i) => el("th", { class: i > 1 ? "num" : "" }, h)))),
+        el("thead", {}, el("tr", {}, ["", "Producto", "Vigente", "Posible", "Objetivo", "MP/PVP", "kg/mes", "$/mes en juego"].map((h, i) => el("th", { class: i > 1 ? "num" : "" }, h)))),
         tbody,
       ])),
     ]));
@@ -168,7 +170,7 @@ function detalle(f, esc, semana, re) {
   const pactos = [...f.pactados].reverse();
   return el("div", { class: "det" }, [
     el("div", { class: "det-grid" }, [
-      el("div", {}, [el("h3", {}, "Historial de precio de este producto"), graficoHistoria(f)]),
+      el("div", {}, [el("h3", {}, "Historial de precio de este producto"), graficoHistoria(f, ui.modo)]),
       el("div", { class: "pacto" }, [
         el("h3", {}, "Precio pactado con el cliente"),
         puedeAprobar() ? el("div", { class: "pacto-form" }, [
@@ -220,77 +222,6 @@ async function actualizarRecetas(e) {
   }
 }
 
-// Historial: lo facturado en Odoo (cada factura), lo sugerido cada semana cargada
-// (posible y objetivo) y lo pactado. Una sola escala: $ por unidad de venta.
-const NS = "http://www.w3.org/2000/svg";
-const svg = (tag, attrs = {}) => {
-  const n = document.createElementNS(NS, tag);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-  return n;
-};
-function graficoHistoria(f) {
-  const t = (d) => new Date(d.length === 10 ? d + "T12:00:00" : d).getTime();
-  const tSem = (w) => lunesDeSemana(w).getTime() + 3 * 86400000; // mitad de la semana
-  const fact = (f.historial || [[f.pvp_fecha, f.pvp_kg]]).map(([d, kg]) => ({ x: t(d), y: kg * f.peso_kg, d }));
-  const sug = historiaFila(estado.recetas, estado.semanas, estado.aprobados, { modo: ui.modo }, f.code, f.cliente_id).map((x) => ({ ...x, x: tSem(x.semana) }));
-  const pac = f.pactados.map((x) => ({ x: tSem(x.Semana), y: +x.PrecioU, semana: x.Semana }));
-  const xs = [...fact, ...sug, ...pac].map((p) => p.x);
-  const ys = [...fact.map((p) => p.y), ...sug.flatMap((x) => [x.posibleU, x.objetivoU]), ...pac.map((p) => p.y)];
-  if (!xs.length) return el("p", { class: "mini" }, "Sin datos.");
-  const W = 560, H = 210, P = { l: 52, r: 12, t: 12, b: 26 };
-  let x0 = Math.min(...xs), x1 = Math.max(...xs);
-  if (x1 - x0 < 14 * 86400000) { x0 -= 7 * 86400000; x1 += 7 * 86400000; }
-  const lo = Math.min(...ys) * 0.96, hi = Math.max(...ys) * 1.03;
-  const X = (v) => P.l + ((v - x0) / (x1 - x0)) * (W - P.l - P.r);
-  const Y = (v) => P.t + (1 - (v - lo) / (hi - lo || 1)) * (H - P.t - P.b);
-  const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "spark hist", role: "img", "aria-label": `Historial de precio de ${f.producto}` });
-  [lo, (lo + hi) / 2, hi].forEach((v) => {
-    g.appendChild(svg("line", { x1: P.l, x2: W - P.r, y1: Y(v), y2: Y(v), class: "grid" }));
-    const tx = svg("text", { x: P.l - 6, y: Y(v) + 4, class: "ax", "text-anchor": "end" });
-    tx.textContent = "$" + v.toFixed(2);
-    g.appendChild(tx);
-  });
-  const fmtF = (ms) => new Date(ms).toLocaleDateString("es-EC", { day: "numeric", month: "short" });
-  [[x0, "start"], [x1, "end"]].forEach(([v, a]) => {
-    const tx = svg("text", { x: X(v), y: H - 6, class: "ax", "text-anchor": a });
-    tx.textContent = fmtF(v);
-    g.appendChild(tx);
-  });
-  // facturado: escalón (cada precio vale hasta la siguiente factura)
-  if (fact.length) {
-    let d = `M${X(fact[0].x)},${Y(fact[0].y)}`;
-    fact.slice(1).forEach((p) => (d += `H${X(p.x)}V${Y(p.y)}`));
-    g.appendChild(svg("path", { d: d + `H${X(x1)}`, class: "l-fact" }));
-  }
-  const linea = (pts, k, cls) => { if (pts.length > 1) g.appendChild(svg("path", { d: pts.map((p, i) => `${i ? "L" : "M"}${X(p.x)},${Y(p[k])}`).join(""), class: cls })); };
-  linea(sug, "objetivoU", "l-maximo");
-  linea(sug, "posibleU", "l-actual");
-  const tip = el("div", { class: "tip hidden", role: "tooltip" });
-  const marca = (cx, cy, cls, texto, rombo) => {
-    g.appendChild(rombo ? svg("path", { d: `M${cx},${cy - 6}L${cx + 6},${cy}L${cx},${cy + 6}L${cx - 6},${cy}Z`, class: cls }) : svg("circle", { cx, cy, r: 4, class: cls }));
-    const hit = svg("circle", { cx, cy, r: 10, fill: "transparent" });
-    hit.addEventListener("mouseenter", () => { tip.innerHTML = texto; tip.classList.remove("hidden"); });
-    hit.addEventListener("mousemove", (e) => { tip.style.left = e.clientX + 14 + "px"; tip.style.top = e.clientY + 14 + "px"; });
-    hit.addEventListener("mouseleave", () => tip.classList.add("hidden"));
-    g.appendChild(hit);
-  };
-  fact.forEach((p) => marca(X(p.x), Y(p.y), "p-fact", `<b>Facturado</b> ${p.d}<br>${usd(p.y)} por unidad`));
-  sug.forEach((p) => {
-    marca(X(p.x), Y(p.objetivoU), "p-maximo", `<b>${semanaCorta(p.semana)}</b><br>Objetivo ${usd(p.objetivoU)}<br>Posible ${usd(p.posibleU)}`);
-    marca(X(p.x), Y(p.posibleU), "p-actual", `<b>${semanaCorta(p.semana)}</b><br>Posible ${usd(p.posibleU)}<br>Objetivo ${usd(p.objetivoU)}`);
-  });
-  pac.forEach((p) => marca(X(p.x), Y(p.y), "p-pactado", `<b>Pactado ${semanaCorta(p.semana)}</b><br>${usd(p.y)} por unidad`, true));
-  return el("div", {}, [
-    el("div", { class: "leyenda" }, [
-      el("span", {}, [el("i", { class: "sw fact" }), "Facturado (Odoo)"]),
-      el("span", {}, [el("i", { class: "sw actual" }), "Posible"]),
-      el("span", {}, [el("i", { class: "sw maximo" }), "Objetivo"]),
-      el("span", {}, [el("i", { class: "sw pactado" }), "Pactado"]),
-    ]),
-    g, tip,
-  ]);
-}
-
 function kpi(t, v, s, cls = "") {
   return el("div", { class: "kpi" }, [el("span", {}, t), el("b", { class: cls }, v), el("small", {}, s)]);
 }
@@ -309,7 +240,7 @@ function exportar(filas) {
     Cliente: f.cliente, Canal: f.canal, Código: f.code, Producto: f.producto, Frutas: f.frutas.join(", "), Acción: f.accion,
     "Vigente $/u": f.pvpU, "Posible $/u": f.posibleU, "Δ posible": +f.dPos.toFixed(4), "Objetivo $/u": f.objetivoU, "Δ objetivo": +f.dObj.toFixed(4),
     "Pactado $/u": f.pactado ? +f.pactado.PrecioU : "", "Pactado semana": f.pactado ? f.pactado.Semana : "",
-    "Margen aportación": +f.margen.toFixed(4), "kg/mes": f.kg_mes, "$/mes en juego": Math.round(f.impactoMes), "Última factura": f.pvp_fecha, Referencia: f.ref,
+    "MP/PVP": +(1 - f.margen).toFixed(4), "MP/PVP sin ajuste": +f.mpPvpSinCambio.toFixed(4), "kg/mes": f.kg_mes, "$/mes en juego": Math.round(f.impactoMes), "Última factura": f.pvp_fecha, Referencia: f.ref,
   }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Precios por cliente");

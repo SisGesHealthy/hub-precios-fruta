@@ -3,6 +3,8 @@
 // Paleta validada con el validador de dataviz (claro y oscuro).
 import { el, clear } from "./dom.js";
 import { estado } from "./app.js";
+import { calcularFilas } from "./calculo.js";
+import { graficoHistoria } from "./historia.js";
 import { semanaCorta, titulo, usd, pct, claseDelta } from "./util.js";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -12,8 +14,36 @@ const svg = (tag, attrs = {}) => {
   return n;
 };
 
+const sel = { cliente: "", code: "" };
+
+// Precio de venta de un producto×cliente en el tiempo (mismo gráfico que el detalle de Precios).
+function seccionVenta(root) {
+  const { filas } = calcularFilas(estado.recetas, estado.semanas, estado.aprobados, {});
+  const clientes = [...new Set(filas.map((f) => f.cliente))].sort();
+  if (!clientes.includes(sel.cliente)) sel.cliente = clientes.includes("PROBA UE") ? "PROBA UE" : clientes[0];
+  const prods = filas.filter((f) => f.cliente === sel.cliente).sort((a, b) => b.kg_mes - a.kg_mes);
+  if (!prods.some((f) => f.code === sel.code)) sel.code = prods[0]?.code;
+  const f = prods.find((x) => x.code === sel.code);
+  const caja = el("section", { class: "card venta" });
+  const pintar = () => { root.replaceChild(seccionVenta(root), caja); };
+  caja.append(
+    el("div", { class: "cab" }, [
+      el("div", {}, [el("h2", {}, "Precio de venta por producto"), el("p", { class: "nota" }, "Facturado en Odoo, sugerido cada semana (posible / objetivo) y pactado. $ por unidad de venta.")]),
+      el("div", { class: "filtros" }, [
+        el("label", { class: "f" }, [el("span", {}, "Cliente"), el("select", { onchange: (e) => { sel.cliente = e.target.value; pintar(); } },
+          clientes.map((c) => el("option", { value: c, selected: c === sel.cliente }, c)))]),
+        el("label", { class: "f" }, [el("span", {}, "Producto"), el("select", { onchange: (e) => { sel.code = e.target.value; pintar(); } },
+          prods.map((x) => el("option", { value: x.code, selected: x.code === sel.code }, `${x.code} · ${x.producto}`)))]),
+      ]),
+    ]),
+    f ? graficoHistoria(f, "semanal") : el("p", { class: "nota" }, "Sin productos."),
+  );
+  return caja;
+}
+
 export function vistaTendencia(root) {
   const sems = [...estado.semanas].reverse(); // vieja → nueva
+  if (estado.recetas) root.appendChild(seccionVenta(root));
   root.appendChild(el("div", { class: "cab" }, el("div", {}, [
     el("h1", { class: "titulo" }, "Tendencia de la fruta"),
     el("p", { class: "sub" }, `${sems.length} semanas cargadas · $/kg`),

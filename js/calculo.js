@@ -43,7 +43,8 @@ export function calcularFilas(recetas, semanas, pactados, params) {
   for (const v0 of recetas.ventas) {
     const rec = recetas.productos[v0.code];
     if (!rec) continue;
-    if ((p.solo_empresas && v0.empresa === false) || v0.kg_mes < (p.min_kg_mes || 0)) continue;
+    const personal = v0.empresa === false || (CONFIG.clientesPersonal || []).includes(v0.cliente.toUpperCase());
+    if ((p.solo_empresas && personal) || v0.kg_mes < (p.min_kg_mes || 0)) continue;
     const v = { ...v0, cliente: nombreCliente(v0.cliente, rec.name) };
     const frutas = frutasDeReceta(rec, CONFIG.mapeo);
     const historia = porFila[`${v.code}|${v.cliente_id}`] || [];
