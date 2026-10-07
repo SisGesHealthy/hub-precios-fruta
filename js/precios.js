@@ -96,7 +96,7 @@ function pintar(cont) {
         el("td", {}, puedeAprobar() ? el("input", { type: "checkbox", "aria-label": "Seleccionar", checked: ui.sel.has(k), onchange: (e) => { e.target.checked ? ui.sel.add(k) : ui.sel.delete(k); barraSel(); } }) : null),
         el("td", {}, [el("div", { class: "prod" }, [f.producto, f.sobrePolitica ? el("span", { class: "pol", title: "MP/PVP sobre política aun con el ajuste" }, " ● política") : null]),
           el("div", { class: "mini" }, `${f.code} · ${f.frutas.map(titulo).join(", ")} · ref. ${f.ref}${f.manual ? " · sin ventas en Odoo (datos de Comercial)" : ""} · ver historial ›`)]),
-        el("td", { class: "num" }, [usd(f.pvpU), el("div", { class: "mini", title: f.manual ? "Sin ventas en Odoo: precio de la tabla de Comercial" : "Fecha de la última factura" }, f.manual ? "precio de tabla" : f.pvp_fecha),
+        el("td", { class: "num" }, [usd(f.pvpU), el("div", { class: "mini", title: f.pvp_fuente ? "Precio de lista actual de Odoo (product.list_price)" : "Fecha de la última factura" }, f.pvp_fuente || (f.manual ? "precio de tabla" : f.pvp_fecha)),
           f.pactado ? el("div", { class: "mini pactado", title: "Último precio pactado registrado" }, `pactado ${usd(+f.pactado.PrecioU)} · ${semanaCorta(f.pactado.Semana)}`) : null]),
         el("td", { class: "num" }, [el("b", {}, usd(f.posibleU)), el("div", { class: "delta " + claseDelta(f.dPos) }, pct(f.dPos))]),
         el("td", { class: "num" }, [el("b", {}, usd(f.objetivoU)), el("div", { class: "delta " + claseDelta(f.dObj) }, pct(f.dObj))]),

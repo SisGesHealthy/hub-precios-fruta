@@ -32,7 +32,7 @@ export async function recargar() {
 
 // Versión publicada (version.json). Si la app abierta es más vieja (caché del navegador o
 // del service worker), borra la caché y recarga UNA vez. Subir este número en cada publicación.
-const VERSION = 9;
+const VERSION = 10;
 async function asegurarVersion() {
   if (CONFIG.useMock && location.hostname === "localhost") return;
   try {
