@@ -63,6 +63,8 @@ export const CONFIG = {
     MP00232: { fruta: "MANGO" },
     MPI002: { fruta: "MANGO", factor: 1.47, intermedio: true },
     MP00235: { fruta: "MORA DESPITONADA" },
+    MP00213: { fruta: "DURAZNO" }, // durazno grado 8 (entra vía MPI001 durazno entero pelado)
+    MP00160: { fruta: "DURAZNO" },
     MP00022: { fruta: "PIÑA", opcional: true },
     MP00023: { fruta: "PIÑA PELADA", opcional: true },
     MP00020: { fruta: "PAPAYA", opcional: true },
