@@ -32,7 +32,19 @@ export function rangoSemana(sem) {
   return `${l.getDate()} ${MESES[l.getMonth()]} – ${d.getDate()} ${MESES[d.getMonth()]}`;
 }
 
-export const semanaCorta = (sem) => "S" + sem.split("-S")[1];
+// Todas las semanas desde `desde` (inclusive) hasta `hasta`, para poder cargar histórico.
+export function semanasDesde(desde, hasta) {
+  const out = [];
+  for (let l = lunesDeSemana(desde); ; l = new Date(l.getFullYear(), l.getMonth(), l.getDate() + 7)) {
+    const [y, w] = isoSemana(l);
+    const s = `${y}-S${String(w).padStart(2, "0")}`;
+    if (s > hasta) break;
+    out.push(s);
+  }
+  return out;
+}
+
+export const semanaCorta =(sem) => "S" + sem.split("-S")[1];
 
 // "TOMATE DE ÁRBOL- EXPORTACION" → "TOMATE DE ARBOL EXPORTACION" (misma regla que el Excel de prueba)
 // La Ñ se conserva (PIÑA es el nombre en Odoo); solo se quitan tildes.

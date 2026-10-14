@@ -11,7 +11,7 @@ import { el, clear, toast } from "./dom.js";
 import { datos, faltaColumnaComprado } from "./datos.js";
 import { estado, recargar, esCompras } from "./app.js";
 import { calcularFilas } from "./calculo.js";
-import { semanaObjetivo, rangoSemana, semanaCorta, normFruta, titulo, usd, pct, leerNum, claseDelta } from "./util.js";
+import { semanaObjetivo, semanasDesde, rangoSemana, semanaCorta, normFruta, titulo, usd, pct, leerNum, claseDelta } from "./util.js";
 
 const FRUTAS_MAPEADAS = [...new Set(Object.values(CONFIG.mapeo).map((m) => m.fruta))];
 const OPCIONALES = new Set(Object.values(CONFIG.mapeo).filter((m) => m.opcional).map((m) => m.fruta));
@@ -60,7 +60,8 @@ export function vistaCargar(root) {
   function pintarCab() {
     clear(cab);
     const ya = estado.semanas.find((s) => s.semana === semana);
-    const opciones = [...new Set([obj, ...estado.semanas.map((x) => x.semana)])].sort().reverse();
+    // desde S15 (inicio de Odoo) para poder cargar el histórico de compras
+    const opciones = [...new Set([obj, ...semanasDesde("2026-S15", obj), ...estado.semanas.map((x) => x.semana)])].sort().reverse();
     const i = opciones.indexOf(semana);
     const ir = (w) => { semana = w; iniciar(); };
     cab.append(
