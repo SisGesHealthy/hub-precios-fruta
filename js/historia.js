@@ -18,7 +18,7 @@ export function graficoHistoria(f, modo) {
   const t = (d) => new Date(d.length === 10 ? d + "T12:00:00" : d).getTime();
   const tSem = (w) => lunesDeSemana(w).getTime() + 3 * 86400000; // mitad de la semana
   const fact = (f.historial || (f.manual ? [] : [[f.pvp_fecha, f.pvp_kg]])).map(([d, kg]) => ({ x: t(d), y: kg * f.peso_kg, d }));
-  const sug = historiaFila(estado.recetas, estado.semanas, estado.aprobados, { modo }, f.code, f.cliente_id).map((x) => ({ ...x, x: tSem(x.semana) }));
+  const sug = historiaFila(estado.recetas, estado.semanas.filter((s) => !s.historico), estado.aprobados, { modo }, f.code, f.cliente_id).map((x) => ({ ...x, x: tSem(x.semana) }));
   const pac = f.pactados.map((x) => ({ x: tSem(x.Semana), y: +x.PrecioU, semana: x.Semana }));
   const xs = [...fact, ...sug, ...pac].map((p) => p.x);
   const ys = [...fact.map((p) => p.y), ...sug.flatMap((x) => [x.posibleU, x.objetivoU]), ...pac.map((p) => p.y)];

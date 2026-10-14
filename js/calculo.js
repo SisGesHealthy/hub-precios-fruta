@@ -76,3 +76,15 @@ export function historiaFila(recetas, semanasTodas, pactados, params, code, clie
   });
   return out;
 }
+
+// Costo actual de Odoo de cada fruta (ingrediente de fruta fresca en las recetas): presupuesto
+// por defecto de las frutas que nunca se han presupuestado.
+export function costosOdoo(recetas) {
+  const out = {};
+  for (const p of Object.values(recetas?.productos || {}))
+    for (const i of p.ingredientes) {
+      const m = CONFIG.mapeo[i.code];
+      if (m && !m.intermedio && out[m.fruta] == null && i.precio_odoo > 0) out[m.fruta] = Math.round(i.precio_odoo * 1000) / 1000;
+    }
+  return out;
+}

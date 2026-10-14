@@ -56,7 +56,8 @@ export function vistaTendencia(root) {
     el("span", {}, [el("i", { class: "sw lleno" }), "Semana comprada"]),
     el("span", {}, [el("i", { class: "sw hueco" }), "No se compró"]),
   ]));
-  const frutas = Object.keys(sems[sems.length - 1].frutas).sort();
+  // todas las frutas que aparecen en alguna semana (no solo en la última)
+  const frutas = [...new Set(sems.flatMap((s) => Object.keys(s.frutas)))].sort();
   const tip = el("div", { class: "tip hidden", role: "tooltip" });
   const grid = el("div", { class: "multiples" });
   for (const f of frutas) grid.appendChild(mini(f, sems, tip));
@@ -84,7 +85,8 @@ function mini(fruta, sems, tip) {
     t.textContent = semanaCorta(sems[i].semana);
     s.appendChild(t);
   });
-  const ultimo = pts[pts.length - 1];
+  const conDato = pts.filter(Boolean); // semanas en que hubo precio (las otras no se compró)
+  const ultimo = conDato[conDato.length - 1];
   if (ultimo) s.appendChild(svg("line", { x1: P.l, x2: W - P.r, y1: y(ultimo.presupuesto), y2: y(ultimo.presupuesto), class: "l-presup" }));
   const linea = (campo, cls) => {
     const d = pts.map((p, i) => (p ? `${i && pts[i - 1] ? "L" : "M"}${x(i)},${y(p[campo])}` : "")).join("");
@@ -104,7 +106,7 @@ function mini(fruta, sems, tip) {
     const r = svg("rect", { x: x(i) - ancho / 2, y: 0, width: ancho, height: H, fill: "transparent" });
     r.addEventListener("mouseenter", (e) => {
       cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.classList.remove("hidden");
-      tip.innerHTML = `<b>${titulo(fruta)} · ${semanaCorta(sems[i].semana)}</b><br>Actual ${usd(p.actual)}${p.comprado ? " · comprada" : " · no se compró"}<br>Máximo ${usd(p.maximo)}<br>Presupuesto ${usd(p.presupuesto)}`;
+      tip.innerHTML = `<b>${titulo(fruta)} · ${semanaCorta(sems[i].semana)}</b><br>Actual ${usd(p.actual)}${p.comprado ? " · comprada" : " · no se compró"}<br>Máximo ${usd(p.maximo)}<br>Presupuesto ${usd(p.presupuesto)}${p.nota ? "<br>" + p.nota : ""}`;
       tip.classList.remove("hidden");
     });
     r.addEventListener("mousemove", (e) => { tip.style.left = e.clientX + 14 + "px"; tip.style.top = e.clientY + 14 + "px"; });
@@ -112,12 +114,12 @@ function mini(fruta, sems, tip) {
     s.appendChild(r);
   });
 
-  const prev = pts.length > 1 ? pts[pts.length - 2] : null;
+  const prev = conDato.length > 1 ? conDato[conDato.length - 2] : null; // compra anterior
   const dSem = ultimo && prev ? ultimo.actual / prev.actual - 1 : null;
   const dPre = ultimo ? ultimo.actual / ultimo.presupuesto - 1 : null;
   return el("figure", { class: "card mult" }, [
     el("figcaption", {}, [el("b", {}, titulo(fruta)), el("span", {}, [usd(ultimo?.actual), " ",
-      el("span", { class: "delta " + claseDelta(dSem), title: "vs semana anterior" }, pct(dSem)), " · ",
+      el("span", { class: "delta " + claseDelta(dSem), title: "vs la compra anterior" }, pct(dSem)), " · ",
       el("span", { class: "delta " + claseDelta(dPre), title: "vs presupuesto" }, `${pct(dPre)} presup.`)])]),
     s,
   ]);

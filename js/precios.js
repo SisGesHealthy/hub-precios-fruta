@@ -26,10 +26,13 @@ export function vistaPrecios(root) {
 
 function pintar(cont) {
   clear(cont);
-  const lista = estado.semanas.map((s) => s.semana); // nueva primero
+  // Las semanas históricas (importadas de Odoo) son solo para la tendencia de la fruta: no se
+  // navega a ellas para sugerir precios de venta. Sí cuentan como "semana anterior".
+  const lista = estado.semanas.filter((s) => !s.historico).map((s) => s.semana); // nueva primero
+  if (!lista.length) { cont.appendChild(el("div", { class: "vacio" }, ["Aún no hay semanas cargadas por Compras (solo histórico). ", el("a", { href: "#/cargar", class: "link" }, "Cargar la semana →")])); return; }
   if (!lista.includes(ui.semana)) ui.semana = lista[0];
   const idx = lista.indexOf(ui.semana);
-  const semanasHasta = estado.semanas.slice(idx); // la elegida y las anteriores
+  const semanasHasta = estado.semanas.filter((s) => s.semana <= ui.semana); // la elegida y las anteriores
   const s0 = semanasHasta[0];
   const obj = semanaObjetivo().semana;
   const { esc, filas: todas } = calcularFilas(estado.recetas, semanasHasta, estado.aprobados, { modo: ui.modo, solo_empresas: !ui.personal });

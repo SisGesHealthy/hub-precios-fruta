@@ -6,6 +6,10 @@
 // Las filas son las frutas de CONFIG.mapeo (nombres de Odoo). Las "opcionales"
 // (piña, frutilla, concentrados…) se llenan solo si su precio se movió: una fila
 // sin precio actual no se guarda y ese ingrediente queda a su costo de Odoo.
+//
+// El PRESUPUESTO se define una sola vez (botón "Presupuesto"), no cada semana: en la
+// tabla semanal se muestra de solo lectura. "Importar histórico" carga de una vez las
+// semanas pasadas (Precio_Fruta_Historico.xlsx, armado desde las compras de Odoo).
 import { CONFIG } from "./config.js";
 import { el, clear, toast } from "./dom.js";
 import { datos, faltaColumnaComprado } from "./datos.js";
@@ -15,18 +19,6 @@ import { semanaObjetivo, semanasDesde, rangoSemana, semanaCorta, normFruta, titu
 
 const FRUTAS_MAPEADAS = [...new Set(Object.values(CONFIG.mapeo).map((m) => m.fruta))];
 const OPCIONALES = new Set(Object.values(CONFIG.mapeo).filter((m) => m.opcional).map((m) => m.fruta));
-
-// Costo actual de Odoo de cada fruta (del ingrediente de fruta fresca en las recetas):
-// presupuesto sugerido para las opcionales que nunca se han cargado.
-function costosOdoo() {
-  const out = {};
-  for (const p of Object.values(estado.recetas.productos))
-    for (const i of p.ingredientes) {
-      const m = CONFIG.mapeo[i.code];
-      if (m && !m.intermedio && out[m.fruta] == null && i.precio_odoo > 0) out[m.fruta] = i.precio_odoo;
-    }
-  return out;
-}
 
 export function vistaCargar(root) {
   const obj = semanaObjetivo().semana;
@@ -43,16 +35,21 @@ export function vistaCargar(root) {
     return estado.semanas.find((s) => s.semana < semana) || null;
   }
 
+  // último precio conocido de cada fruta antes de esta semana (no solo de la semana anterior:
+  // una fruta que no se compró la semana pasada trae el de la última vez que se compró)
+  function ultimoPrecio(f) {
+    return estado.semanas.find((s) => s.semana < semana && s.frutas[f])?.frutas[f] || null;
+  }
+
   function iniciar() {
     const actual = estado.semanas.find((s) => s.semana === semana);
-    const base = actual || anterior();
-    const odoo = costosOdoo();
-    const extra = Object.keys(base?.frutas || {}).filter((f) => !FRUTAS_MAPEADAS.includes(f));
+    const P = estado.presupuesto || {};
+    const extra = Object.keys(actual?.frutas || {}).filter((f) => !FRUTAS_MAPEADAS.includes(f));
     borrador = [...FRUTAS_MAPEADAS, ...extra].map((f) => {
-      const v = base?.frutas[f];
-      if (v) // semana nueva: llega con los valores de la anterior, Compras solo cambia lo que se movió
-        return { fruta: f, presupuesto: v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "", comprado: actual ? !!v.comprado : false };
-      return { fruta: f, presupuesto: odoo[f] != null ? Math.round(odoo[f] * 1000) / 1000 : null, actual: null, maximo: null, nota: "", comprado: false };
+      const v = actual ? actual.frutas[f] : ultimoPrecio(f);
+      if (v) // semana nueva: llega con el último precio de esa fruta; Compras solo cambia lo que se movió
+        return { fruta: f, presupuesto: P[f] ?? v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "", comprado: actual ? !!v.comprado : false };
+      return { fruta: f, presupuesto: P[f] ?? null, actual: null, maximo: null, nota: "", comprado: false };
     });
     pintar();
   }
@@ -79,6 +76,9 @@ export function vistaCargar(root) {
         ]),
       ]),
       el("div", { class: "acciones" }, [
+        el("button", { class: "btn btn-sec", onclick: editarPresupuesto, title: "El presupuesto de cada fruta se define una sola vez" }, "Presupuesto"),
+        esCompras() || CONFIG.useMock ? el("label", { class: "btn btn-sec", title: "Carga de una vez semanas pasadas (Precio_Fruta_Historico.xlsx)" },
+          ["Importar histórico", el("input", { type: "file", accept: ".xlsx", class: "hidden", onchange: importarHistorico })]) : null,
         el("button", { class: "btn btn-sec", onclick: descargarPlantilla, title: "Excel con todas las frutas, para llenar y subir" }, "Descargar plantilla"),
         el("label", { class: "btn btn-sec" }, ["Subir Excel", el("input", { type: "file", accept: ".xlsx,.xls,.csv", class: "hidden", onchange: subirExcel })]),
         el("button", { class: "btn btn-sec", onclick: () => { borrador.push({ fruta: "", presupuesto: null, actual: null, maximo: null, nota: "", comprado: false }); pintar(); tbody.querySelector("tr:last-child input")?.focus(); } }, "Agregar fruta"),
@@ -112,7 +112,8 @@ export function vistaCargar(root) {
       const tr = el("tr", { class: OPCIONALES.has(r.fruta) ? "opc" : "" }, [
         el("td", {}, el("input", { class: "in-fruta", value: titulo(r.fruta), list: "frutas-conocidas", "aria-label": "Fruta",
           onchange: (e) => { r.fruta = normFruta(e.target.value); pintarDeltas(); } })),
-        celdaNum(r, "presupuesto"), celdaNum(r, "actual"), celdaNum(r, "maximo"),
+        el("td", { class: "num presup", title: "Presupuesto único de la fruta (se cambia con el botón «Presupuesto»)" }, r.presupuesto != null ? usd(r.presupuesto, 3) : "—"),
+        celdaNum(r, "actual"), celdaNum(r, "maximo"),
         el("td", { class: "centro" }, el("input", { type: "checkbox", class: "chk-comprado", checked: r.comprado, "aria-label": `Comprado ${r.fruta}`,
           title: "Marcar si esta fruta sí se compró esta semana", onchange: (e) => (r.comprado = e.target.checked) })),
         el("td", { class: "num d-sem" }), el("td", { class: "num d-pre" }),
@@ -142,7 +143,8 @@ export function vistaCargar(root) {
         if (r.fruta && !OPCIONALES.has(r.fruta) && FRUTAS_MAPEADAS.includes(r.fruta)) dudas.push(`${titulo(r.fruta)} sin precio actual: queda a costo Odoo`);
       }
       else if (!r.fruta) { errores.push(`Fila ${i + 1}: falta el nombre de la fruta`); mal = true; }
-      else if (!(r.presupuesto > 0) || !(r.actual > 0)) { errores.push(`${titulo(r.fruta)}: falta el presupuesto`); mal = true; }
+      else if (!(r.actual > 0)) { errores.push(`${titulo(r.fruta)}: precio actual inválido`); mal = true; }
+      else if (!(r.presupuesto > 0)) { errores.push(`${titulo(r.fruta)}: sin presupuesto (defínelo con el botón «Presupuesto»)`); mal = true; }
       else if (r.maximo != null && r.maximo < r.actual) { errores.push(`${titulo(r.fruta)}: el máximo esperado (${usd(r.maximo)}) es menor que el actual (${usd(r.actual)})`); mal = true; }
       if (dSem != null && Math.abs(dSem) > CONFIG.saltoSospechoso) dudas.push(`${titulo(r.fruta)} cambia ${pct(dSem)} contra la semana anterior`);
       if (r.fruta && !FRUTAS_MAPEADAS.includes(r.fruta)) dudas.push(`${titulo(r.fruta)} no está ligada a ningún código de Odoo: no mueve ninguna receta`);
@@ -204,7 +206,7 @@ export function vistaCargar(root) {
       if (!nombre || num("actual") == null) continue; // fila sin precio actual = no se movió
       let r = borrador.find((b) => b.fruta === nombre);
       if (!r) borrador.push((r = { fruta: nombre, nota: "", comprado: false }));
-      r.presupuesto = num("presupuesto") ?? r.presupuesto;
+      if (r.presupuesto == null) r.presupuesto = num("presupuesto"); // el presupuesto es único: solo si la fruta no tiene
       r.actual = num("actual");
       r.maximo = num("maximo");
       if (col.comprado >= 0) r.comprado = /^(SI|SÍ|X|1|TRUE|VERDADERO)$/i.test(String(row[col.comprado] ?? "").trim());
@@ -246,6 +248,110 @@ export function vistaCargar(root) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Reporte semanal");
     XLSX.writeFile(wb, `Precio_Fruta_${semanaCorta(semana)}.xlsx`);
+  }
+
+  // ---------------- presupuesto único ----------------
+  function editarPresupuesto() {
+    const P = estado.presupuesto || {};
+    const frutas = [...new Set([...FRUTAS_MAPEADAS, ...Object.keys(P)])];
+    const vals = Object.fromEntries(frutas.map((f) => [f, P[f] ?? null]));
+    const guardado = estado.presupuestoGuardado || {};
+    const puede = esCompras() || CONFIG.useMock;
+    const dlg = el("dialog", { class: "dlg" });
+    const cerrar = () => { dlg.close(); dlg.remove(); };
+    dlg.append(
+      el("h2", {}, "Presupuesto por fruta ($/kg)"),
+      el("p", { class: "nota" }, "Se define una sola vez y vale para todas las semanas: es la base de los «vs presupuesto» y del margen que se sostiene. Las frutas sin presupuesto guardado muestran su costo actual de Odoo o el último que traía una semana."),
+      el("div", { class: "scroll dlg-cuerpo" }, el("table", { class: "tabla" }, [
+        el("thead", {}, el("tr", {}, [el("th", {}, "Fruta"), el("th", { class: "num" }, "Presupuesto"), el("th", {}, "")])),
+        el("tbody", {}, frutas.map((f) => el("tr", {}, [
+          el("td", {}, titulo(f)),
+          el("td", { class: "num" }, el("input", { inputmode: "decimal", class: "in-pactado", value: vals[f] ?? "", disabled: !puede, "aria-label": `Presupuesto ${f}`,
+            oninput: (e) => (vals[f] = leerNum(e.target.value)) })),
+          el("td", { class: "mini" }, guardado[f] != null ? "guardado" : "sugerido"),
+        ]))),
+      ])),
+      el("div", { class: "acciones dlg-pie" }, [
+        el("button", { class: "btn btn-sec", onclick: cerrar }, "Cancelar"),
+        puede ? el("button", { class: "btn btn-verde", onclick: async (e) => {
+          const mapa = Object.fromEntries(Object.entries(vals).filter(([, v]) => v > 0));
+          e.target.disabled = true; e.target.textContent = "Guardando…";
+          try {
+            await datos.guardarPresupuesto(mapa, estado.usuario.correo);
+            await recargar();
+            cerrar(); iniciar();
+            toast("Presupuesto guardado");
+          } catch (err) { toast("No se pudo guardar: " + err.message, "err"); e.target.disabled = false; e.target.textContent = "Guardar presupuesto"; }
+        } }, "Guardar presupuesto") : null,
+      ])
+    );
+    document.body.appendChild(dlg);
+    dlg.showModal();
+  }
+
+  // ---------------- importar histórico ----------------
+  // Precio_Fruta_Historico.xlsx: una hoja por semana (S15, S16…) con FRUTA, PRECIO ACTUAL,
+  // PRECIO MAXIMO ESPERADO, COMPRADO, KG COMPRADOS, N° COMPRAS. Por defecto se marcan las
+  // semanas que aún no están en la app, menos las dos más recientes del archivo (esas las carga Compras).
+  async function importarHistorico(e) {
+    const f = e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    const wb = XLSX.read(await f.arrayBuffer());
+    const det = wb.Sheets["Detalle compras"] ? XLSX.utils.sheet_to_json(wb.Sheets["Detalle compras"], { header: 1 })[1]?.[0] : null;
+    const anio = String(det || "").match(/^(\d{4})-S/)?.[1] || String(new Date().getFullYear());
+    const semanasArch = wb.SheetNames.filter((n) => /^S\d{1,2}$/.test(n)).map((n) => {
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: "" });
+      const cab = rows[0].map((c) => normFruta(c));
+      const col = (rx) => cab.findIndex((c) => rx.test(c));
+      const c = { f: col(/^FRUTA/), a: col(/ACTUAL/), m: col(/MAXIMO/), co: col(/COMPRAD/), kg: col(/^KG/), n: col(/COMPRAS$/) };
+      const frutas = {};
+      for (const r of rows.slice(1)) {
+        const fr = normFruta(r[c.f]); const a = leerNum(r[c.a]);
+        if (!fr || a == null) continue;
+        const kg = leerNum(r[c.kg]), nc = leerNum(r[c.n]);
+        frutas[fr] = { actual: a, maximo: leerNum(r[c.m]) ?? a, presupuesto: null, comprado: c.co < 0 || /^S/i.test(String(r[c.co])),
+          nota: kg != null ? `${Math.round(kg).toLocaleString("es-EC")} kg${nc ? " · " + nc + (nc === 1 ? " compra" : " compras") : ""}` : "" };
+      }
+      return { semana: `${anio}-S${n.slice(1).padStart(2, "0")}`, frutas };
+    }).filter((s) => Object.keys(s.frutas).length).sort((a, b) => (a.semana < b.semana ? -1 : 1));
+    if (!semanasArch.length) return toast("El archivo no tiene hojas de semana (S15, S16…)", "err");
+    const ya = new Set(estado.semanasCrudas.map((s) => s.semana));
+    const recientes = new Set(semanasArch.slice(-2).map((s) => s.semana));
+    const marcadas = new Set(semanasArch.filter((s) => !ya.has(s.semana) && !recientes.has(s.semana)).map((s) => s.semana));
+    const dlg = el("dialog", { class: "dlg" });
+    const cerrar = () => { dlg.close(); dlg.remove(); };
+    const btn = el("button", { class: "btn btn-verde" }, "");
+    const rotulo = () => (btn.textContent = `Importar ${marcadas.size} semanas`);
+    rotulo();
+    btn.onclick = async () => {
+      const elegidas = semanasArch.filter((s) => marcadas.has(s.semana));
+      if (!elegidas.length) return;
+      btn.disabled = true;
+      try {
+        await datos.importarSemanas(elegidas, "historico Odoo (Precio_Fruta_Historico.xlsx)", (h, t) => (btn.textContent = `Importando… ${h} de ${t}`));
+        await recargar();
+        cerrar(); iniciar();
+        toast(`${elegidas.length} semanas importadas`);
+      } catch (err) { toast("No se pudo importar: " + err.message, "err"); btn.disabled = false; rotulo(); }
+    };
+    dlg.append(
+      el("h2", {}, "Importar histórico de precios de fruta"),
+      el("p", { class: "nota" }, "Las semanas importadas sirven para ver cómo se movió el precio de la fruta (Tendencias). No se usan para sugerir precios de venta. Las que ya están en la app vienen desmarcadas y no se reemplazan."),
+      el("div", { class: "scroll dlg-cuerpo" }, el("table", { class: "tabla" }, [
+        el("thead", {}, el("tr", {}, ["", "Semana", "Frutas", ""].map((h) => el("th", {}, h)))),
+        el("tbody", {}, semanasArch.map((s) => el("tr", {}, [
+          el("td", {}, el("input", { type: "checkbox", checked: marcadas.has(s.semana), disabled: ya.has(s.semana), "aria-label": s.semana,
+            onchange: (e) => { e.target.checked ? marcadas.add(s.semana) : marcadas.delete(s.semana); rotulo(); } })),
+          el("td", {}, `${semanaCorta(s.semana)} · ${rangoSemana(s.semana)}`),
+          el("td", { class: "num" }, String(Object.keys(s.frutas).length)),
+          el("td", { class: "mini" }, ya.has(s.semana) ? "ya cargada" : recientes.has(s.semana) ? "reciente: la carga Compras" : ""),
+        ]))),
+      ])),
+      el("div", { class: "acciones dlg-pie" }, [el("button", { class: "btn btn-sec", onclick: cerrar }, "Cancelar"), btn])
+    );
+    document.body.appendChild(dlg);
+    dlg.showModal();
   }
 
   async function guardar() {

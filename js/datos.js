@@ -1,7 +1,10 @@
 // Capa de datos: la misma interfaz en modo demo (localStorage) y en SharePoint.
 //
 //   semanas(n)                 → [{semana, cargado_por, fecha, frutas:{FRUTA:{presupuesto,actual,maximo,nota,comprado}}}] (nueva primero)
+//   todo(n)                    → {semanas, presupuesto:{FRUTA: $/kg}} (presupuesto único, filas Title="PRESUPUESTO")
 //   guardarSemana(sem, frutas, usuario)
+//   guardarPresupuesto({FRUTA: $/kg}, usuario)  → el presupuesto se define UNA vez, no cada semana
+//   importarSemanas([{semana, frutas}], usuario, avance) → histórico (CargadoPor "historico Odoo")
 //   recetas()                  → {generado, productos:{code:{...}}, ventas:[...]}
 //   aprobados()                → [{Producto, ClienteId, Semana, PrecioU, PrecioKg, RefFrutas, ...}] (todos: es el histórico de pactados)
 //   aprobar(filas, semana, refFrutas, usuario)   filas: [{code, cliente, cliente_id, precioU, precioKg}]
@@ -10,9 +13,16 @@
 
 import { CONFIG } from "./config.js";
 
+const PRESUP = "PRESUPUESTO"; // filas especiales de la misma lista: el presupuesto único por fruta
+const presupuestoDe = (items) => {
+  const out = {};
+  for (const f of items) if (f.Title === PRESUP && +f.Presupuesto > 0) out[f.Fruta] = +f.Presupuesto;
+  return out;
+};
 const agrupar = (items) => {
   const por = {};
   for (const f of items) {
+    if (f.Title === PRESUP) continue;
     const s = (por[f.Title] ||= { semana: f.Title, frutas: {}, cargado_por: f.CargadoPor || "", fecha: f.Modified || "" });
     if ((f.Modified || "") > s.fecha) s.fecha = f.Modified;
     s.frutas[f.Fruta] = { presupuesto: +f.Presupuesto, actual: +f.Actual, maximo: +f.Maximo, nota: f.Nota || "", comprado: !!f.Comprado };
@@ -30,14 +40,26 @@ const lsSet = (k, v) => { try { localStorage.setItem(LS + k, JSON.stringify(v));
 const demo = {
   async preparar() {},
   async subirRecetas() {},
-  async semanas(n = 12) {
+  async semanas(n = 12) { return (await this.todo(n)).semanas; },
+  async todo(n = 104) {
     let items = lsGet("semanal", null);
     if (!items) {
       const r = await fetch("data/semanas_demo.json");
       items = r.ok ? await r.json() : [];
       lsSet("semanal", items);
     }
-    return agrupar(items).slice(0, n);
+    return { semanas: agrupar(items).slice(0, n), presupuesto: presupuestoDe(items) };
+  },
+  async guardarPresupuesto(mapa, usuario) {
+    const items = lsGet("semanal", []).filter((i) => i.Title !== PRESUP);
+    for (const [f, v] of Object.entries(mapa)) items.push({ Title: PRESUP, Fruta: f, Presupuesto: v, CargadoPor: usuario, Modified: new Date().toISOString() });
+    lsSet("semanal", items);
+  },
+  async importarSemanas(semanas, usuario, avance) {
+    const items = lsGet("semanal", []);
+    for (const s of semanas) for (const [f, v] of Object.entries(s.frutas)) items.push({ ...itemSemana(s.semana, f, v, usuario), Modified: new Date().toISOString() });
+    lsSet("semanal", items);
+    avance?.(semanas.length, semanas.length);
   },
   async guardarSemana(semana, frutas, usuario) {
     const ahora = new Date().toISOString();
@@ -107,6 +129,11 @@ async function leerTodo(k) {
   }
   return out;
 }
+// N peticiones a la vez (SharePoint limita si se le manda todo junto)
+async function enLotes(cosas, fn, n = 6) {
+  const cola = [...cosas];
+  await Promise.all(Array.from({ length: n }, async () => { while (cola.length) await fn(cola.shift()); }));
+}
 const crear = (k, item) => spFetch(`${lista(k)}/items`, { method: "POST", headers: { "Content-Type": NM }, body: JSON.stringify(item) });
 
 // Columnas de las listas (nombre interno = nombre visible, sin espacios). Igual que
@@ -153,7 +180,22 @@ const sp = {
     await spFetch(`${SITE}/_api/web/GetFolderByServerRelativeUrl('${encodeURIComponent(dir)}')/Files/add(url='recetas.json',overwrite=true)`,
       { method: "POST", body: texto });
   },
-  async semanas(n = 12) { return agrupar(await leerTodo("semanal")).slice(0, n); },
+  async semanas(n = 12) { return (await this.todo(n)).semanas; },
+  async todo(n = 104) {
+    const items = await leerTodo("semanal");
+    return { semanas: agrupar(items).slice(0, n), presupuesto: presupuestoDe(items) };
+  },
+  async guardarPresupuesto(mapa, usuario) {
+    // primero las filas nuevas, después se borran las viejas (si algo falla no queda sin presupuesto)
+    const viejos = (await leerTodo("semanal")).filter((i) => i.Title === PRESUP);
+    await enLotes(Object.entries(mapa), ([f, v]) => crear("semanal", { Title: PRESUP, Fruta: f, Presupuesto: v, CargadoPor: usuario }));
+    await enLotes(viejos, (i) => spFetch(`${lista("semanal")}/items(${i.ID})`, { method: "POST", headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": "*" } }));
+  },
+  async importarSemanas(semanas, usuario, avance) {
+    const filas = semanas.flatMap((s) => Object.entries(s.frutas).map(([f, v]) => itemSemana(s.semana, f, v, usuario)));
+    let hechas = 0;
+    await enLotes(filas, async (x) => { await crear("semanal", x); avance?.(++hechas, filas.length); });
+  },
   async guardarSemana(semana, frutas, usuario) {
     // reemplaza la semana completa (si Compras corrige, no quedan filas viejas). Primero
     // se crean las nuevas y recién después se borran las viejas: si algo falla a medias

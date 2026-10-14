@@ -5,6 +5,7 @@ import { datos } from "./datos.js";
 import { vistaCargar } from "./cargar.js";
 import { vistaPrecios } from "./precios.js";
 import { vistaTendencia } from "./tendencia.js";
+import { costosOdoo } from "./calculo.js";
 
 const vista = document.getElementById("vista");
 export const estado = { usuario: null, semanas: [], recetas: null, aprobados: {} };
@@ -25,14 +26,33 @@ export const puedeAprobar = () =>
   CONFIG.useMock || [...CONFIG.roles.gerencia, ...CONFIG.roles.admin].includes(estado.usuario?.correo);
 
 export async function recargar() {
-  const [semanas, aprobados] = await Promise.all([datos.semanas(104), datos.aprobados()]); // 2 años de historial
-  estado.semanas = semanas;
+  const [{ semanas, presupuesto }, aprobados] = await Promise.all([datos.todo(104), datos.aprobados()]); // 2 años de historial
+  estado.semanasCrudas = semanas;
+  estado.presupuestoGuardado = presupuesto;
   estado.aprobados = aprobados;
+  aplicarPresupuesto();
+}
+
+// El presupuesto es UNO por fruta (no por semana): el guardado en el editor de presupuesto;
+// si una fruta no tiene, el último que traía una semana cargada; si tampoco, su costo de Odoo.
+// Se aplica a todas las semanas, así el cálculo y los "vs presupuesto" usan el mismo número.
+// Semanas históricas (importadas de Odoo) = solo tendencia de la fruta, no precios de venta.
+export function aplicarPresupuesto() {
+  const ef = { ...costosOdoo(estado.recetas) };
+  for (const s of [...(estado.semanasCrudas || [])].reverse()) // de la más vieja a la más nueva: gana la última
+    for (const [f, v] of Object.entries(s.frutas)) if (v.presupuesto > 0) ef[f] = v.presupuesto;
+  Object.assign(ef, estado.presupuestoGuardado || {});
+  estado.presupuesto = ef;
+  estado.semanas = (estado.semanasCrudas || []).map((s) => ({
+    ...s,
+    historico: /^historico/i.test(s.cargado_por || ""),
+    frutas: Object.fromEntries(Object.entries(s.frutas).map(([f, v]) => [f, { ...v, presupuesto: ef[f] ?? v.presupuesto }])),
+  }));
 }
 
 // Versión publicada (version.json). Si la app abierta es más vieja (caché del navegador o
 // del service worker), borra la caché y recarga UNA vez. Subir este número en cada publicación.
-const VERSION = 12;
+const VERSION = 13;
 async function asegurarVersion() {
   if (CONFIG.useMock && location.hostname === "localhost") return;
   try {
@@ -71,6 +91,7 @@ async function main() {
     await datos.preparar();
     await recargar();
     estado.recetas = await datos.recetas();
+    aplicarPresupuesto(); // ahora sí con el costo de Odoo como respaldo
   } catch (e) {
     clear(vista);
     if (e.status === 404) return pantallaSinRecetas();
