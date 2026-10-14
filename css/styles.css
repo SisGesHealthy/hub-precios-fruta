@@ -187,3 +187,11 @@ a { color: inherit; text-decoration: none; }
 .dlg-cuerpo { max-height: 55vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
 .dlg-pie { justify-content: flex-end; margin-top: 12px; }
 .tabla-carga td.presup { color: var(--dim); }
+.movimientos { padding: 4px 6px 6px; margin-top: 4px; }
+.movimientos .fila.elegida { background: var(--brand-50); }
+.mini-spark { width: 120px; height: 28px; }
+.det-card { margin-bottom: 14px; }
+.det-card .cli-cab { padding: 0 0 6px; }
+.spark.det-fruta { max-width: 100%; }
+.spark .b-kg { fill: var(--serie-actual); opacity: .35; }
+.sw.kg { width: 10px; height: 10px; border: 0; background: var(--serie-actual); opacity: .35; border-radius: 2px; }
