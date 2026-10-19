@@ -6,6 +6,7 @@ import { el, clear } from "./dom.js";
 import { estado } from "./app.js";
 import { calcularFilas } from "./calculo.js";
 import { graficoHistoria } from "./historia.js";
+import { abrirInforme } from "./informe.js";
 import { semanaCorta, semanasDesde, rangoSemana, titulo, usd, pct, claseDelta } from "./util.js";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -44,10 +45,13 @@ function seccionVenta(root) {
 
 export function vistaTendencia(root) {
   const sems = [...estado.semanas].reverse(); // vieja → nueva (incluye las históricas importadas)
-  root.appendChild(el("div", { class: "cab" }, el("div", {}, [
-    el("h1", { class: "titulo" }, "Tendencia de la fruta"),
-    el("p", { class: "sub" }, sems.length ? `${sems.length} semanas con precio · ${semanaCorta(sems[0].semana)} a ${semanaCorta(sems[sems.length - 1].semana)} · $/kg` : "Sin semanas cargadas"),
-  ])));
+  root.appendChild(el("div", { class: "cab" }, [
+    el("div", {}, [
+      el("h1", { class: "titulo" }, "Tendencia de la fruta"),
+      el("p", { class: "sub" }, sems.length ? `${sems.length} semanas con precio · ${semanaCorta(sems[0].semana)} a ${semanaCorta(sems[sems.length - 1].semana)} · $/kg` : "Sin semanas cargadas"),
+    ]),
+    sems.length ? el("div", { class: "acciones" }, el("button", { class: "btn btn-verde", onclick: () => abrirInforme(sems) }, "Exportar informe PDF")) : null,
+  ]));
   if (sems.length) {
     const cont = el("div");
     root.appendChild(cont);
@@ -68,14 +72,14 @@ const kgDe = (nota) => {
   return m ? +m[1].replace(/[.,]/g, "") : null;
 };
 
-function serieFruta(fruta, semanasEje, porSemana) {
+export function serieFruta(fruta, semanasEje, porSemana) {
   return semanasEje.map((w) => {
     const v = porSemana[w]?.frutas[fruta];
     return v ? { semana: w, ...v, kg: kgDe(v.nota) } : null;
   });
 }
 
-function resumen(fruta, serie) {
+export function resumen(fruta, serie) {
   const pts = serie.filter(Boolean);
   if (!pts.length) return null;
   const ult = pts[pts.length - 1], pri = pts[0];
@@ -136,7 +140,7 @@ function pintarFruta(cont, sems) {
 }
 
 // minigráfica de la tabla: solo el precio actual (sin ejes); hueco donde no hubo dato
-function spark(serie) {
+export function spark(serie) {
   const W = 120, H = 28, pts = serie.map((p, i) => (p ? { i, v: p.actual } : null));
   const vs = pts.filter(Boolean).map((p) => p.v);
   const lo = Math.min(...vs), hi = Math.max(...vs);
@@ -152,7 +156,7 @@ function spark(serie) {
 
 // gráfica grande: precio (actual, máximo, presupuesto) y, debajo con el mismo eje de semanas,
 // los kg comprados (dos paneles, no doble eje: son magnitudes distintas)
-function detalleFruta(r, eje) {
+export function detalleFruta(r, eje) {
   const W = 920, H1 = 240, H2 = 80, GAP = 18, P = { l: 52, r: 14, t: 14, b: 22 };
   const H = P.t + H1 + GAP + H2 + P.b;
   const serie = r.serie;

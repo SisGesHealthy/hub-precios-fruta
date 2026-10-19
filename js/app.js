@@ -52,7 +52,7 @@ export function aplicarPresupuesto() {
 
 // Versión publicada (version.json). Si la app abierta es más vieja (caché del navegador o
 // del service worker), borra la caché y recarga UNA vez. Subir este número en cada publicación.
-const VERSION = 14;
+const VERSION = 15;
 async function asegurarVersion() {
   if (CONFIG.useMock && location.hostname === "localhost") return;
   try {

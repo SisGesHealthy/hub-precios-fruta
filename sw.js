@@ -1,11 +1,11 @@
 // Service worker: shell en caché para abrir rápido. "Red primero" (lección de
 // Hub Limpieza: con "caché primero" los equipos se quedaban con el JS viejo).
 // Los datos (SharePoint) nunca se cachean aquí.
-const CACHE_NAME = "hub-precios-fruta-v14";
+const CACHE_NAME = "hub-precios-fruta-v15";
 const SHELL_FILES = [
   "./", "./index.html", "./manifest.json", "./css/styles.css", "./icons/logo.png", "./icons/icon-192.png",
   "./js/app.js", "./js/config.js", "./js/auth.js", "./js/datos.js", "./js/dom.js", "./js/util.js", "./js/motor.js",
-  "./js/calculo.js", "./js/historia.js", "./js/cargar.js", "./js/precios.js", "./js/tendencia.js",
+  "./js/calculo.js", "./js/historia.js", "./js/informe.js", "./js/cargar.js", "./js/precios.js", "./js/tendencia.js",
   "./vendor/msal-browser.min.js", "./vendor/xlsx.full.min.js",
 ];
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(CACHE_NAME).then((c) => c.addAll(SHELL_FILES))); self.skipWaiting(); });
