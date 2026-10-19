@@ -6,7 +6,7 @@
 import { CONFIG } from "./config.js";
 import { el, clear, toast } from "./dom.js";
 import { datos } from "./datos.js";
-import { estado, recargar, puedeAprobar } from "./app.js";
+import { estado, recargar, puedeAprobar, avisoSinRecetas } from "./app.js";
 import { calcularFilas } from "./calculo.js";
 import { graficoHistoria } from "./historia.js";
 import { precioIngrediente } from "./motor.js";
@@ -15,6 +15,7 @@ import { semanaObjetivo, rangoSemana, semanaCorta, titulo, usd, pct, num, claseD
 const ui = { modo: CONFIG.params.modo, cliente: "", accion: "", q: "", personal: false, abierto: null, sel: new Set(), semana: null };
 
 export function vistaPrecios(root) {
+  if (estado.faltanRecetas) { root.appendChild(avisoSinRecetas()); return; }
   if (!estado.semanas.length) {
     root.appendChild(el("div", { class: "vacio" }, ["Todavía no hay precios de fruta cargados. ", el("a", { href: "#/cargar", class: "link" }, "Cargar la primera semana →")]));
     return;

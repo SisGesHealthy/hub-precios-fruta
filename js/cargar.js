@@ -218,6 +218,7 @@ export function vistaCargar(root) {
     panelImpacto.appendChild(el("h2", {}, "Lo que esto significa para los clientes"));
     if (!valido) return panelImpacto.appendChild(el("p", { class: "nota" }, "Completa los precios para ver el efecto."));
     const sems = [semanaBorrador(), ...estado.semanas.filter((s) => s.semana < semana)];
+    if (estado.faltanRecetas) return panelImpacto.appendChild(el("p", { class: "nota" }, "Sin datos de Odoo para esta cuenta: el efecto en clientes se ve con Compras o Gerencia."));
     const { filas } = calcularFilas(estado.recetas, sems, estado.aprobados, {});
     const subir = filas.filter((f) => f.accion === "SUBIR");
     const riesgo = subir.reduce((a, f) => a + f.impactoMes, 0);

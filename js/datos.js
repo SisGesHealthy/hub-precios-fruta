@@ -99,7 +99,7 @@ const demo = {
       const r = await fetch(f).catch(() => null);
       if (r && r.ok) return r.json();
     }
-    throw new Error("No hay recetas cargadas.");
+    throw Object.assign(new Error("No hay recetas cargadas."), { status: 404 }); // igual que SharePoint
   },
   async aprobados() { return lsGet("aprobados", []); },
   async aprobar(filas, semana, refFrutas, usuario) {

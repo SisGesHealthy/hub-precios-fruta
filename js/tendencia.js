@@ -57,7 +57,7 @@ export function vistaTendencia(root) {
     root.appendChild(cont);
     pintarFruta(cont, sems);
   }
-  if (estado.recetas) root.appendChild(seccionVenta(root));
+  if (estado.recetas && !estado.faltanRecetas) root.appendChild(seccionVenta(root));
 }
 
 // ---------------------------------------------------------------- fruta ----

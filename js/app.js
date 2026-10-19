@@ -56,7 +56,7 @@ export function aplicarPresupuesto() {
 
 // Versión publicada (version.json). Si la app abierta es más vieja (caché del navegador o
 // del service worker), borra la caché y recarga UNA vez. Subir este número en cada publicación.
-const VERSION = 17;
+const VERSION = 18;
 async function asegurarVersion() {
   if (CONFIG.useMock && location.hostname === "localhost") return;
   try {
@@ -94,11 +94,21 @@ async function main() {
   try {
     await datos.preparar();
     await recargar();
-    estado.recetas = await datos.recetas();
+    // Los datos de Odoo (recetas.json) solo hacen falta para "Precios por cliente". Si esta
+    // cuenta no los puede leer (no existe el archivo o no tiene permiso en la biblioteca de
+    // documentos: SharePoint responde 404 en ambos casos), la app entra igual: Cargar semana
+    // y la tendencia de la fruta funcionan, y Precios por cliente muestra el aviso.
+    try {
+      estado.recetas = await datos.recetas();
+      estado.faltanRecetas = false;
+    } catch (e) {
+      if (e.status !== 404 && e.status !== 403) throw e;
+      estado.recetas = { productos: {}, ventas: [], generado: "—" };
+      estado.faltanRecetas = true;
+    }
     aplicarPresupuesto(); // ahora sí con el costo de Odoo como respaldo
   } catch (e) {
     clear(vista);
-    if (e.status === 404) return pantallaSinRecetas();
     vista.appendChild(el("div", { class: "login" }, [
       el("h1", {}, "No se pudieron leer los datos"),
       el("p", {}, ["Sesión: ", el("b", {}, estado.usuario.correo)]),
@@ -115,12 +125,15 @@ async function main() {
   if ("serviceWorker" in navigator && !CONFIG.useMock) navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-// Primera vez (o si el proceso del lunes aún no corre): no hay recetas.json en SharePoint.
-function pantallaSinRecetas() {
+// Aviso cuando la cuenta no puede leer recetas.json (lo usa "Precios por cliente").
+export function avisoSinRecetas() {
   const admin = CONFIG.roles.admin.includes(estado.usuario.correo);
-  vista.appendChild(el("div", { class: "login" }, [
-    el("h1", {}, "Faltan las recetas de Odoo"),
-    el("p", {}, "El proceso del lunes las sube automáticamente. Mientras tanto, Sistemas puede subir el archivo recetas.json generado con extraer_recetas.py."),
+  return el("div", { class: "login sin-recetas" }, [
+    el("h1", {}, "No se pueden leer los datos de Odoo"),
+    el("p", {}, ["Esta pantalla necesita el archivo recetas.json (recetas y precios por cliente), en ",
+      el("i", {}, "EspacioColaborativo › Documentos compartidos › PreciosFruta"), ". Con la cuenta ", el("b", {}, estado.usuario.correo),
+      " no se encuentra: o no existe, o esta cuenta no tiene permiso de lectura en esa biblioteca."]),
+    el("p", { class: "nota" }, "«Cargar semana» y «Tendencias» funcionan igual sin este archivo."),
     admin ? el("label", { class: "btn btn-verde" }, ["Subir recetas.json", el("input", { type: "file", accept: ".json", class: "hidden",
       onchange: async (e) => {
         const txt = await e.target.files[0].text();
@@ -131,8 +144,8 @@ function pantallaSinRecetas() {
         } catch (err) {
           alert("No se pudo subir: " + err.message);
         }
-      } })]) : el("p", { class: "nota" }, "Avisa a sistemasdegestion@healthyfood.com.ec."),
-  ]));
+      } })]) : el("p", { class: "nota" }, "Pide a sistemasdegestion@healthyfood.com.ec que dé permiso de lectura a esta cuenta en la carpeta PreciosFruta."),
+  ]);
 }
 
 function pantallaLogin(auth, error) {
