@@ -3,6 +3,8 @@
 //   semanas(n)                 → [{semana, cargado_por, fecha, frutas:{FRUTA:{presupuesto,actual,maximo,nota,comprado}}}] (nueva primero)
 //   todo(n)                    → {semanas, presupuesto:{FRUTA: $/kg}} (presupuesto único, filas Title="PRESUPUESTO")
 //   guardarSemana(sem, frutas, usuario)
+//   guardarAgro(sem, {FRUTA:{riesgo,clima,comentario,perspectiva}}, usuario) → filas Title="AGRO|<sem>",
+//                              aparte de los precios: Agrícola y Compras no se pisan
 //   guardarPresupuesto({FRUTA: $/kg}, usuario)  → el presupuesto se define UNA vez, no cada semana
 //   importarSemanas([{semana, frutas}], usuario, avance) → histórico (CargadoPor "historico Odoo")
 //   recetas()                  → {generado, productos:{code:{...}}, ventas:[...]}
@@ -19,10 +21,24 @@ const presupuestoDe = (items) => {
   for (const f of items) if (f.Title === PRESUP && +f.Presupuesto > 0) out[f.Fruta] = +f.Presupuesto;
   return out;
 };
+const AGRO = "AGRO|"; // filas con los datos agronómicos de una fruta en una semana
+const agroDe = (items) => {
+  const out = {};
+  for (const f of items) {
+    if (!String(f.Title || "").startsWith(AGRO)) continue;
+    (out[f.Title.slice(AGRO.length)] ||= {})[f.Fruta] = {
+      riesgo: f.Riesgo || "", clima: f.Clima ? String(f.Clima).split(";").map((x) => x.trim()).filter(Boolean) : [],
+      comentario: f.ComentarioAgro || "", perspectiva: f.Perspectiva || "", por: f.CargadoPor || "", fecha: f.Modified || "",
+    };
+  }
+  return out;
+};
+const itemAgro = (semana, f, a, usuario) =>
+  ({ Title: AGRO + semana, Fruta: f, Riesgo: a.riesgo || "", Clima: (a.clima || []).join("; "), ComentarioAgro: a.comentario || "", Perspectiva: a.perspectiva || "", CargadoPor: usuario });
 const agrupar = (items) => {
   const por = {};
   for (const f of items) {
-    if (f.Title === PRESUP) continue;
+    if (f.Title === PRESUP || String(f.Title || "").startsWith(AGRO)) continue;
     const s = (por[f.Title] ||= { semana: f.Title, frutas: {}, cargado_por: f.CargadoPor || "", fecha: f.Modified || "" });
     if ((f.Modified || "") > s.fecha) s.fecha = f.Modified;
     s.frutas[f.Fruta] = { presupuesto: +f.Presupuesto, actual: +f.Actual, maximo: +f.Maximo, nota: f.Nota || "", comprado: !!f.Comprado,
@@ -51,7 +67,12 @@ const demo = {
       items = r.ok ? await r.json() : [];
       lsSet("semanal", items);
     }
-    return { semanas: agrupar(items).slice(0, n), presupuesto: presupuestoDe(items) };
+    return { semanas: agrupar(items).slice(0, n), presupuesto: presupuestoDe(items), agro: agroDe(items) };
+  },
+  async guardarAgro(semana, mapa, usuario) {
+    const items = lsGet("semanal", []).filter((i) => i.Title !== AGRO + semana);
+    for (const [f, a] of Object.entries(mapa)) items.push({ ...itemAgro(semana, f, a, usuario), Modified: new Date().toISOString() });
+    lsSet("semanal", items);
   },
   async guardarPresupuesto(mapa, usuario) {
     const items = lsGet("semanal", []).filter((i) => i.Title !== PRESUP);
@@ -202,7 +223,17 @@ const sp = {
   async semanas(n = 12) { return (await this.todo(n)).semanas; },
   async todo(n = 104) {
     const items = await leerTodo("semanal");
-    return { semanas: agrupar(items).slice(0, n), presupuesto: presupuestoDe(items) };
+    return { semanas: agrupar(items).slice(0, n), presupuesto: presupuestoDe(items), agro: agroDe(items) };
+  },
+  async guardarAgro(semana, mapa, usuario) {
+    // igual que la semana: primero las filas nuevas, después se borran las viejas
+    const viejos = (await leerTodo("semanal")).filter((i) => i.Title === AGRO + semana);
+    const filas = Object.entries(mapa).map(([f, a]) => itemAgro(semana, f, a, usuario));
+    if (filas.length) {
+      await crearTolerante(filas);
+      await enLotes(filas.slice(1), (x) => crear("semanal", x));
+    }
+    await enLotes(viejos, (i) => spFetch(`${lista("semanal")}/items(${i.ID})`, { method: "POST", headers: { "X-HTTP-Method": "DELETE", "IF-MATCH": "*" } }));
   },
   async guardarPresupuesto(mapa, usuario) {
     // primero las filas nuevas, después se borran las viejas (si algo falla no queda sin presupuesto)

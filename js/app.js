@@ -18,16 +18,19 @@ const RUTAS = {
 const DEMO_USUARIOS = [
   ["Compras", "compras@healthyfood.com.ec"],
   ["Gerencia", "gerencia@healthyfood.com.ec"],
+  ["Agrícola", "agricola@healthyfood.com.ec"],
   ["Sistemas de Gestión", "sistemasdegestion@healthyfood.com.ec"],
 ];
 
+export const esAgricola = () => (CONFIG.roles.agricola || []).includes(estado.usuario?.correo);
 export const esCompras = () => [...CONFIG.roles.compras, ...CONFIG.roles.admin].includes(estado.usuario?.correo);
 export const puedeAprobar = () =>
   CONFIG.useMock || [...CONFIG.roles.gerencia, ...CONFIG.roles.admin].includes(estado.usuario?.correo);
 
 export async function recargar() {
-  const [{ semanas, presupuesto }, aprobados] = await Promise.all([datos.todo(104), datos.aprobados()]); // 2 años de historial
+  const [{ semanas, presupuesto, agro }, aprobados] = await Promise.all([datos.todo(104), datos.aprobados()]); // 2 años de historial
   estado.semanasCrudas = semanas;
+  estado.agro = agro || {};
   estado.presupuestoGuardado = presupuesto;
   estado.aprobados = aprobados;
   aplicarPresupuesto();
@@ -46,13 +49,14 @@ export function aplicarPresupuesto() {
   estado.semanas = (estado.semanasCrudas || []).map((s) => ({
     ...s,
     historico: /^historico/i.test(s.cargado_por || ""),
-    frutas: Object.fromEntries(Object.entries(s.frutas).map(([f, v]) => [f, { ...v, presupuesto: ef[f] ?? v.presupuesto }])),
+    // datos agronómicos: los de las filas AGRO|semana (los registra Agrícola o Compras) mandan
+    frutas: Object.fromEntries(Object.entries(s.frutas).map(([f, v]) => [f, { ...v, presupuesto: ef[f] ?? v.presupuesto, ...(estado.agro?.[s.semana]?.[f] || {}) }])),
   }));
 }
 
 // Versión publicada (version.json). Si la app abierta es más vieja (caché del navegador o
 // del service worker), borra la caché y recarga UNA vez. Subir este número en cada publicación.
-const VERSION = 16;
+const VERSION = 17;
 async function asegurarVersion() {
   if (CONFIG.useMock && location.hostname === "localhost") return;
   try {
@@ -106,7 +110,7 @@ async function main() {
   }
   pintarBarra();
   window.addEventListener("hashchange", rutear);
-  if (!location.hash) location.hash = esCompras() ? "#/cargar" : "#/precios";
+  if (!location.hash) location.hash = esCompras() || esAgricola() ? "#/cargar" : "#/precios";
   else rutear();
   if ("serviceWorker" in navigator && !CONFIG.useMock) navigator.serviceWorker.register("sw.js").catch(() => {});
 }

@@ -13,7 +13,7 @@
 import { CONFIG } from "./config.js";
 import { el, clear, toast } from "./dom.js";
 import { datos, columnasFaltantes } from "./datos.js";
-import { estado, recargar, esCompras } from "./app.js";
+import { estado, recargar, esCompras, esAgricola } from "./app.js";
 import { calcularFilas } from "./calculo.js";
 import { semanaObjetivo, semanasDesde, rangoSemana, semanaCorta, normFruta, titulo, usd, pct, leerNum, claseDelta } from "./util.js";
 
@@ -62,6 +62,22 @@ export function vistaCargar(root) {
     return estado.semanas.find((s) => s.semana < semana && s.frutas[f])?.frutas[f] || null;
   }
 
+  // permisos: Compras/Sistemas cargan precios y agro; Agrícola solo los datos agronómicos
+  const puedePrecios = esCompras() || (CONFIG.useMock && !esAgricola()); // en demo, el usuario "Agrícola" también se comporta como Agrícola
+  const puedeAgro = puedePrecios || esAgricola();
+
+  // datos agronómicos de una fruta para esta semana: los registrados para la semana; si no hay,
+  // los últimos conocidos (riesgo y clima suelen durar varias semanas)
+  function agroDe(f) {
+    const vacio = { riesgo: "", clima: [], comentario: "", perspectiva: "" };
+    const A = estado.agro || {};
+    if (A[semana]?.[f]) return { ...vacio, ...A[semana][f], clima: [...(A[semana][f].clima || [])] };
+    const previa = Object.keys(A).filter((w) => w < semana && A[w][f]).sort().pop();
+    if (previa) return { ...vacio, ...A[previa][f], clima: [...(A[previa][f].clima || [])] };
+    const p = ultimoPrecio(f); // registros viejos con agro en la misma fila del precio
+    return p ? { riesgo: p.riesgo || "", clima: [...(p.clima || [])], comentario: p.comentario || "", perspectiva: p.perspectiva || "" } : vacio;
+  }
+
   function iniciar() {
     const actual = estado.semanas.find((s) => s.semana === semana);
     const P = estado.presupuesto || {};
@@ -70,9 +86,8 @@ export function vistaCargar(root) {
       const v = actual ? actual.frutas[f] : ultimoPrecio(f);
       if (v) // semana nueva: llega con el último precio de esa fruta; Compras solo cambia lo que se movió
         // los datos agronómicos se arrastran de la última carga de esa fruta (suelen durar varias semanas)
-        return { fruta: f, presupuesto: P[f] ?? v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "", comprado: actual ? !!v.comprado : false,
-          riesgo: v.riesgo || "", clima: [...(v.clima || [])], comentario: v.comentario || "", perspectiva: v.perspectiva || "" };
-      return { fruta: f, presupuesto: P[f] ?? null, actual: null, maximo: null, nota: "", comprado: false, riesgo: "", clima: [], comentario: "", perspectiva: "" };
+        return { fruta: f, presupuesto: P[f] ?? v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "", comprado: actual ? !!v.comprado : false, ...agroDe(f) };
+      return { fruta: f, presupuesto: P[f] ?? null, actual: null, maximo: null, nota: "", comprado: false, ...agroDe(f) };
     });
     pintar();
   }
@@ -100,21 +115,22 @@ export function vistaCargar(root) {
       ]),
       el("div", { class: "acciones" }, [
         el("button", { class: "btn btn-sec", onclick: editarPresupuesto, title: "El presupuesto de cada fruta se define una sola vez" }, "Presupuesto"),
-        esCompras() || CONFIG.useMock ? el("label", { class: "btn btn-sec", title: "Carga de una vez semanas pasadas (Precio_Fruta_Historico.xlsx)" },
+        puedePrecios ? el("label", { class: "btn btn-sec", title: "Carga de una vez semanas pasadas (Precio_Fruta_Historico.xlsx)" },
           ["Importar histórico", el("input", { type: "file", accept: ".xlsx", class: "hidden", onchange: importarHistorico })]) : null,
         el("button", { class: "btn btn-sec", onclick: descargarPlantilla, title: "Excel con todas las frutas, para llenar y subir" }, "Descargar plantilla"),
-        el("label", { class: "btn btn-sec" }, ["Subir Excel", el("input", { type: "file", accept: ".xlsx,.xls,.csv", class: "hidden", onchange: subirExcel })]),
-        el("button", { class: "btn btn-sec", onclick: () => { borrador.push({ fruta: "", presupuesto: null, actual: null, maximo: null, nota: "", comprado: false, riesgo: "", clima: [], comentario: "", perspectiva: "" }); pintar(); tbody.querySelector("tr:last-child input")?.focus(); } }, "Agregar fruta"),
+        !puedePrecios ? null : el("label", { class: "btn btn-sec" }, ["Subir Excel", el("input", { type: "file", accept: ".xlsx,.xls,.csv", class: "hidden", onchange: subirExcel })]),
+        !puedePrecios ? null : el("button", { class: "btn btn-sec", onclick: () => { borrador.push({ fruta: "", presupuesto: null, actual: null, maximo: null, nota: "", comprado: false, riesgo: "", clima: [], comentario: "", perspectiva: "" }); pintar(); tbody.querySelector("tr:last-child input")?.focus(); } }, "Agregar fruta"),
         btnGuardar,
       ])
     );
-    btnGuardar.disabled = !esCompras() && !CONFIG.useMock;
-    btnGuardar.title = btnGuardar.disabled ? "Solo Compras puede guardar" : "";
+    btnGuardar.disabled = !puedeAgro;
+    btnGuardar.textContent = puedePrecios ? "Guardar semana" : "Guardar datos agronómicos";
+    btnGuardar.title = !puedeAgro ? "Solo Compras y Agrícola pueden guardar" : puedePrecios ? "" : "Agrícola registra riesgo, clima, comentario y «en un mes»; los precios los carga Compras";
   }
 
   function celdaNum(r, campo) {
     return el("td", { class: "num" }, el("input", {
-      inputmode: "decimal", value: r[campo] ?? "", "aria-label": `${campo} ${r.fruta}`,
+      inputmode: "decimal", value: r[campo] ?? "", "aria-label": `${campo} ${r.fruta}`, disabled: !puedePrecios,
       oninput: (e) => { r[campo] = leerNum(e.target.value); pintarDeltas(); },
     }));
   }
@@ -133,11 +149,11 @@ export function vistaCargar(root) {
           " · llenar solo si su precio cambió; vacías quedan a su costo de Odoo (el presupuesto sugerido es ese costo)"])));
       }
       const tr = el("tr", { class: OPCIONALES.has(r.fruta) ? "opc" : "" }, [
-        el("td", {}, el("input", { class: "in-fruta", value: titulo(r.fruta), list: "frutas-conocidas", "aria-label": "Fruta",
+        el("td", {}, el("input", { class: "in-fruta", value: titulo(r.fruta), disabled: !puedePrecios, list: "frutas-conocidas", "aria-label": "Fruta",
           onchange: (e) => { r.fruta = normFruta(e.target.value); pintarDeltas(); } })),
         el("td", { class: "num presup", title: "Presupuesto único de la fruta (se cambia con el botón «Presupuesto»)" }, r.presupuesto != null ? usd(r.presupuesto, 3) : "—"),
         celdaNum(r, "actual"), celdaNum(r, "maximo"),
-        el("td", { class: "centro" }, el("input", { type: "checkbox", class: "chk-comprado", checked: r.comprado, "aria-label": `Comprado ${r.fruta}`,
+        el("td", { class: "centro" }, el("input", { type: "checkbox", class: "chk-comprado", checked: r.comprado, disabled: !puedePrecios, "aria-label": `Comprado ${r.fruta}`,
           title: "Marcar si esta fruta sí se compró esta semana", onchange: (e) => (r.comprado = e.target.checked) })),
         el("td", { class: "num d-sem" }), el("td", { class: "num d-pre" }),
         el("td", {}, selAgro(r, "riesgo", CONFIG.agro.riesgos, "Riesgo agronómico")),
@@ -390,7 +406,29 @@ export function vistaCargar(root) {
     dlg.showModal();
   }
 
+  // datos agronómicos de todas las filas que tengan algo (con o sin precio esta semana)
+  function agroBorrador() {
+    const out = {};
+    for (const r of borrador)
+      if (r.fruta && (r.riesgo || r.perspectiva || (r.clima || []).length || (r.comentario || "").trim()))
+        out[r.fruta] = { riesgo: r.riesgo || "", clima: r.clima || [], comentario: (r.comentario || "").trim(), perspectiva: r.perspectiva || "" };
+    return out;
+  }
+
   async function guardar() {
+    const etiqueta = btnGuardar.textContent;
+    if (!puedePrecios) { // Agrícola: solo lo agronómico, sin tocar precios
+      btnGuardar.disabled = true; btnGuardar.textContent = "Guardando…";
+      try {
+        await datos.guardarAgro(semana, agroBorrador(), estado.usuario.correo);
+        await recargar();
+        const falta = columnasFaltantes();
+        toast(falta.length ? `Guardado sin: ${falta.join(", ")} (faltan esas columnas en SharePoint, avisa a Sistemas)` : `Datos agronómicos de ${semanaCorta(semana)} guardados`, falta.length ? "err" : "ok");
+        pintarCab();
+      } catch (err) { toast("No se pudo guardar: " + err.message, "err"); }
+      finally { btnGuardar.disabled = false; btnGuardar.textContent = etiqueta; }
+      return;
+    }
     if (+btnGuardar.dataset.errores) return toast("Corrige los errores marcados antes de guardar", "err");
     const s = semanaBorrador();
     if (!Object.keys(s.frutas).length) return;
@@ -399,6 +437,7 @@ export function vistaCargar(root) {
     btnGuardar.textContent = "Guardando…";
     try {
       await datos.guardarSemana(semana, s.frutas, estado.usuario.correo);
+      await datos.guardarAgro(semana, agroBorrador(), estado.usuario.correo);
       await recargar();
       const falta = columnasFaltantes();
       toast(falta.length ? `Semana ${semanaCorta(semana)} guardada, pero sin: ${falta.join(", ")} (faltan esas columnas en SharePoint, avisa a Sistemas)`
@@ -420,6 +459,7 @@ export function vistaCargar(root) {
   root.append(
     cab,
     el("p", { class: "nota" }, "Precios en $/kg. Copia el rango de tu Excel con su fila de encabezados y pégalo con Ctrl+V sobre la tabla, o súbelo con «Subir Excel». Si el máximo esperado queda vacío se toma el actual. Marca «Comprado» en las frutas que sí se compraron esta semana."),
+    !puedePrecios && puedeAgro ? el("div", { class: "aviso" }, "Puedes registrar riesgo agronómico, factores climáticos, «en un mes» y comentario de cada fruta. Los precios los carga Compras y aquí se ven de solo lectura.") : null,
     avisos,
     el("div", { class: "grid-carga" }, [panelImpacto, el("div", { class: "card scroll" }, tabla)]),
     el("datalist", { id: "frutas-conocidas" }, FRUTAS_MAPEADAS.map((f) => el("option", { value: titulo(f) })))

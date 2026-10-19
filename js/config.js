@@ -38,6 +38,8 @@ export const CONFIG = {
   roles: {
     compras: ["compras@healthyfood.com.ec"],
     gerencia: ["jmgonzalez@healthyfood.com.ec"],
+    // Agrícola: solo registra los datos agronómicos (riesgo, clima, comentario, en un mes); no toca precios
+    agricola: ["agricola@healthyfood.com.ec"],
     admin: ["sistemasdegestion@healthyfood.com.ec"],
   },
 
