@@ -12,13 +12,34 @@
 // semanas pasadas (Precio_Fruta_Historico.xlsx, armado desde las compras de Odoo).
 import { CONFIG } from "./config.js";
 import { el, clear, toast } from "./dom.js";
-import { datos, faltaColumnaComprado } from "./datos.js";
+import { datos, columnasFaltantes } from "./datos.js";
 import { estado, recargar, esCompras } from "./app.js";
 import { calcularFilas } from "./calculo.js";
 import { semanaObjetivo, semanasDesde, rangoSemana, semanaCorta, normFruta, titulo, usd, pct, leerNum, claseDelta } from "./util.js";
 
 const FRUTAS_MAPEADAS = [...new Set(Object.values(CONFIG.mapeo).map((m) => m.fruta))];
 const OPCIONALES = new Set(Object.values(CONFIG.mapeo).filter((m) => m.opcional).map((m) => m.fruta));
+
+// Selección simple (riesgo, perspectiva) con color según el valor
+function selAgro(r, campo, opciones, etiqueta) {
+  const clase = () => "sel-agro " + (campo === "riesgo" ? "r-" + normFruta(r.riesgo || "").toLowerCase() : "p-" + (CONFIG.agro.perspectiva.indexOf(r.perspectiva) + 1));
+  const s = el("select", { class: clase(), "aria-label": `${etiqueta} ${r.fruta}`, onchange: (e) => { r[campo] = e.target.value; s.className = clase(); } },
+    [el("option", { value: "" }, "—"), ...opciones.map((o) => el("option", { value: o, selected: o === r[campo] }, o))]);
+  return s;
+}
+
+// Selección múltiple de factores climáticos: un desplegable con casillas
+function multiClima(r) {
+  const resumen = el("summary", {});
+  const pintar = () => { resumen.textContent = r.clima.length ? r.clima.join(", ") : "—"; resumen.title = r.clima.join("\n"); };
+  pintar();
+  return el("details", { class: "multi" }, [resumen, el("div", { class: "multi-menu" }, CONFIG.agro.clima.map((o) =>
+    el("label", {}, [el("input", { type: "checkbox", checked: r.clima.includes(o), onchange: (e) => {
+      r.clima = e.target.checked ? [...r.clima, o] : r.clima.filter((x) => x !== o);
+      r.clima.sort((a, b) => CONFIG.agro.clima.indexOf(a) - CONFIG.agro.clima.indexOf(b));
+      pintar();
+    } }), o])))]);
+}
 
 export function vistaCargar(root) {
   const obj = semanaObjetivo().semana;
@@ -48,8 +69,10 @@ export function vistaCargar(root) {
     borrador = [...FRUTAS_MAPEADAS, ...extra].map((f) => {
       const v = actual ? actual.frutas[f] : ultimoPrecio(f);
       if (v) // semana nueva: llega con el último precio de esa fruta; Compras solo cambia lo que se movió
-        return { fruta: f, presupuesto: P[f] ?? v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "", comprado: actual ? !!v.comprado : false };
-      return { fruta: f, presupuesto: P[f] ?? null, actual: null, maximo: null, nota: "", comprado: false };
+        // los datos agronómicos se arrastran de la última carga de esa fruta (suelen durar varias semanas)
+        return { fruta: f, presupuesto: P[f] ?? v.presupuesto, actual: v.actual, maximo: v.maximo, nota: actual ? v.nota || "" : "", comprado: actual ? !!v.comprado : false,
+          riesgo: v.riesgo || "", clima: [...(v.clima || [])], comentario: v.comentario || "", perspectiva: v.perspectiva || "" };
+      return { fruta: f, presupuesto: P[f] ?? null, actual: null, maximo: null, nota: "", comprado: false, riesgo: "", clima: [], comentario: "", perspectiva: "" };
     });
     pintar();
   }
@@ -81,7 +104,7 @@ export function vistaCargar(root) {
           ["Importar histórico", el("input", { type: "file", accept: ".xlsx", class: "hidden", onchange: importarHistorico })]) : null,
         el("button", { class: "btn btn-sec", onclick: descargarPlantilla, title: "Excel con todas las frutas, para llenar y subir" }, "Descargar plantilla"),
         el("label", { class: "btn btn-sec" }, ["Subir Excel", el("input", { type: "file", accept: ".xlsx,.xls,.csv", class: "hidden", onchange: subirExcel })]),
-        el("button", { class: "btn btn-sec", onclick: () => { borrador.push({ fruta: "", presupuesto: null, actual: null, maximo: null, nota: "", comprado: false }); pintar(); tbody.querySelector("tr:last-child input")?.focus(); } }, "Agregar fruta"),
+        el("button", { class: "btn btn-sec", onclick: () => { borrador.push({ fruta: "", presupuesto: null, actual: null, maximo: null, nota: "", comprado: false, riesgo: "", clima: [], comentario: "", perspectiva: "" }); pintar(); tbody.querySelector("tr:last-child input")?.focus(); } }, "Agregar fruta"),
         btnGuardar,
       ])
     );
@@ -106,7 +129,7 @@ export function vistaCargar(root) {
     borrador.forEach((r, i) => {
       if (!separador && OPCIONALES.has(r.fruta)) {
         separador = true;
-        tbody.appendChild(el("tr", { class: "sep" }, el("td", { colspan: 9 }, [el("b", {}, "Otras frutas e insumos"),
+        tbody.appendChild(el("tr", { class: "sep" }, el("td", { colspan: 13 }, [el("b", {}, "Otras frutas e insumos"),
           " · llenar solo si su precio cambió; vacías quedan a su costo de Odoo (el presupuesto sugerido es ese costo)"])));
       }
       const tr = el("tr", { class: OPCIONALES.has(r.fruta) ? "opc" : "" }, [
@@ -117,6 +140,10 @@ export function vistaCargar(root) {
         el("td", { class: "centro" }, el("input", { type: "checkbox", class: "chk-comprado", checked: r.comprado, "aria-label": `Comprado ${r.fruta}`,
           title: "Marcar si esta fruta sí se compró esta semana", onchange: (e) => (r.comprado = e.target.checked) })),
         el("td", { class: "num d-sem" }), el("td", { class: "num d-pre" }),
+        el("td", {}, selAgro(r, "riesgo", CONFIG.agro.riesgos, "Riesgo agronómico")),
+        el("td", {}, multiClima(r)),
+        el("td", {}, selAgro(r, "perspectiva", CONFIG.agro.perspectiva, "Cómo se ve en un mes")),
+        el("td", {}, el("textarea", { class: "in-coment", rows: 1, placeholder: "—", "aria-label": `Comentario agronómico ${r.fruta}`, oninput: (e) => (r.comentario = e.target.value) }, r.comentario || "")),
         el("td", {}, el("input", { class: "in-nota", value: r.nota, placeholder: "—", "aria-label": "Nota", oninput: (e) => (r.nota = e.target.value) })),
         el("td", {}, el("button", { class: "btn-x", title: "Quitar fila", "aria-label": "Quitar fila", onclick: () => { borrador.splice(i, 1); pintar(); } }, "×")),
       ]);
@@ -165,7 +192,8 @@ export function vistaCargar(root) {
     const frutas = {};
     // solo las filas con precio actual; sin máximo esperado → el mismo actual
     for (const r of borrador)
-      if (r.fruta && r.actual != null) frutas[r.fruta] = { presupuesto: r.presupuesto, actual: r.actual, maximo: r.maximo ?? r.actual, nota: r.nota, comprado: !!r.comprado };
+      if (r.fruta && r.actual != null) frutas[r.fruta] = { presupuesto: r.presupuesto, actual: r.actual, maximo: r.maximo ?? r.actual, nota: r.nota, comprado: !!r.comprado,
+        riesgo: r.riesgo || "", clima: r.clima || [], comentario: (r.comentario || "").trim(), perspectiva: r.perspectiva || "" };
     return { semana, frutas };
   }
 
@@ -198,18 +226,25 @@ export function vistaCargar(root) {
       const cab = row.map((c) => normFruta(c));
       if (cab.includes("FRUTA")) {
         const busca = (rx) => cab.findIndex((c) => rx.test(c) && !c.includes("VARIACION"));
-        col = { fruta: cab.indexOf("FRUTA"), presupuesto: busca(/PRESUP/), actual: busca(/ACTUAL/), maximo: busca(/MAXIMO/), comprado: busca(/COMPRAD/) };
+        col = { fruta: cab.indexOf("FRUTA"), presupuesto: busca(/PRESUP/), actual: busca(/ACTUAL/), maximo: busca(/MAXIMO/), comprado: busca(/COMPRAD/),
+          riesgo: busca(/RIESGO/), clima: busca(/CLIMA/), comentario: busca(/COMENTARIO/), perspectiva: busca(/PERSPECTIVA|UN MES|1 MES/) };
         continue;
       }
       const nombre = normFruta(row[col.fruta]);
       const num = (k) => (col[k] >= 0 ? leerNum(row[col[k]]) : null);
       if (!nombre || num("actual") == null) continue; // fila sin precio actual = no se movió
       let r = borrador.find((b) => b.fruta === nombre);
-      if (!r) borrador.push((r = { fruta: nombre, nota: "", comprado: false }));
+      if (!r) borrador.push((r = { fruta: nombre, nota: "", comprado: false, riesgo: "", clima: [], comentario: "", perspectiva: "" }));
       if (r.presupuesto == null) r.presupuesto = num("presupuesto"); // el presupuesto es único: solo si la fruta no tiene
       r.actual = num("actual");
       r.maximo = num("maximo");
       if (col.comprado >= 0) r.comprado = /^(SI|SÍ|X|1|TRUE|VERDADERO)$/i.test(String(row[col.comprado] ?? "").trim());
+      const txt = (k) => (col[k] >= 0 ? String(row[col[k]] ?? "").trim() : "");
+      const opcion = (val, lista) => lista.find((o) => normFruta(o).startsWith(normFruta(val).split(" ")[0])) || "";
+      if (txt("riesgo")) r.riesgo = opcion(txt("riesgo"), CONFIG.agro.riesgos);
+      if (txt("perspectiva")) r.perspectiva = opcion(txt("perspectiva"), CONFIG.agro.perspectiva);
+      if (txt("clima")) r.clima = txt("clima").split(/[;,]/).map((x) => CONFIG.agro.clima.find((o) => normFruta(o).startsWith(normFruta(x).slice(0, 6))) ).filter(Boolean);
+      if (txt("comentario")) r.comentario = txt("comentario");
       n++;
     }
     pintar();
@@ -234,17 +269,18 @@ export function vistaCargar(root) {
 
   // Misma forma que el Excel de Compras + todas las frutas de Odoo y su código.
   function descargarPlantilla() {
-    const filas = [["FRUTA", "Precio Presupuesto", "PRECIO ACTUAL", "PRECIO MAXIMO ESPERADO", "COMPRADO (SI/NO)", "% VARIACION ACTUAL", "% VARIACION MAXIMO", "CODIGO ODOO", "TIPO"]];
+    const filas = [["FRUTA", "Precio Presupuesto", "PRECIO ACTUAL", "PRECIO MAXIMO ESPERADO", "COMPRADO (SI/NO)", "% VARIACION ACTUAL", "% VARIACION MAXIMO", "CODIGO ODOO", "TIPO",
+      "RIESGO AGRONOMICO", "FACTORES CLIMATICOS (separar con ;)", "PERSPECTIVA 1 MES", "COMENTARIO AGRONOMICO"]];
     const codigos = {};
     for (const [c, m] of Object.entries(CONFIG.mapeo)) (codigos[m.fruta] ||= []).push(c);
     borrador.forEach((r) => filas.push([r.fruta, r.presupuesto ?? "", r.actual ?? "", r.maximo ?? "", r.comprado ? "SI" : "", "", "", (codigos[r.fruta] || []).join(", "),
-      OPCIONALES.has(r.fruta) ? "opcional: llenar solo si cambió" : "semanal"]));
+      OPCIONALES.has(r.fruta) ? "opcional: llenar solo si cambió" : "semanal", r.riesgo || "", (r.clima || []).join("; "), r.perspectiva || "", r.comentario || ""]));
     const ws = XLSX.utils.aoa_to_sheet(filas);
     for (let i = 2; i <= filas.length; i++) {
       ws["F" + i] = { t: "n", f: `IF(AND(B${i}>0,C${i}<>""),(C${i}-B${i})/B${i},"")`, z: "0.0%" };
       ws["G" + i] = { t: "n", f: `IF(AND(B${i}>0,D${i}<>""),(D${i}-B${i})/B${i},"")`, z: "0.0%" };
     }
-    ws["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 15 }, { wch: 24 }, { wch: 17 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 30 }];
+    ws["!cols"] = [{ wch: 34 }, { wch: 18 }, { wch: 15 }, { wch: 24 }, { wch: 17 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 18 }, { wch: 40 }, { wch: 18 }, { wch: 50 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Reporte semanal");
     XLSX.writeFile(wb, `Precio_Fruta_${semanaCorta(semana)}.xlsx`);
@@ -310,7 +346,7 @@ export function vistaCargar(root) {
         const fr = normFruta(r[c.f]); const a = leerNum(r[c.a]);
         if (!fr || a == null) continue;
         const kg = leerNum(r[c.kg]), nc = leerNum(r[c.n]);
-        frutas[fr] = { actual: a, maximo: leerNum(r[c.m]) ?? a, presupuesto: null, comprado: c.co < 0 || /^S/i.test(String(r[c.co])),
+        frutas[fr] = { actual: a, maximo: leerNum(r[c.m]) ?? a, presupuesto: null, comprado: c.co < 0 || /^S/i.test(String(r[c.co])), riesgo: "", clima: [], comentario: "", perspectiva: "",
           nota: kg != null ? `${Math.round(kg).toLocaleString("es-EC")} kg${nc ? " · " + nc + (nc === 1 ? " compra" : " compras") : ""}` : "" };
       }
       return { semana: `${anio}-S${n.slice(1).padStart(2, "0")}`, frutas };
@@ -364,8 +400,9 @@ export function vistaCargar(root) {
     try {
       await datos.guardarSemana(semana, s.frutas, estado.usuario.correo);
       await recargar();
-      toast(faltaColumnaComprado() ? `Semana ${semanaCorta(semana)} guardada (sin "Comprado": falta la columna en SharePoint, avisa a Sistemas)`
-        : `Semana ${semanaCorta(semana)} guardada. Ya la ve Gerencia en Precios por cliente.`, faltaColumnaComprado() ? "err" : "ok");
+      const falta = columnasFaltantes();
+      toast(falta.length ? `Semana ${semanaCorta(semana)} guardada, pero sin: ${falta.join(", ")} (faltan esas columnas en SharePoint, avisa a Sistemas)`
+        : `Semana ${semanaCorta(semana)} guardada. Ya la ve Gerencia en Precios por cliente.`, falta.length ? "err" : "ok");
       pintarCab();
     } catch (err) {
       toast("No se pudo guardar: " + err.message, "err");
@@ -376,7 +413,7 @@ export function vistaCargar(root) {
   }
 
   const tabla = el("table", { class: "tabla tabla-carga", onpaste: onPaste }, [
-    el("thead", {}, el("tr", {}, ["Fruta", "Presupuesto", "Actual", "Máx. esperado", "Comprado", "vs sem. ant.", "vs presup.", "Nota", ""].map((h, i) =>
+    el("thead", {}, el("tr", {}, ["Fruta", "Presupuesto", "Actual", "Máx. esperado", "Comprado", "vs sem. ant.", "vs presup.", "Riesgo agronómico", "Factores climáticos", "En un mes", "Comentario agronómico", "Nota", ""].map((h, i) =>
       el("th", { class: i === 4 ? "centro" : i > 0 && i < 7 ? "num" : "" }, h)))),
     tbody,
   ]);
@@ -384,7 +421,7 @@ export function vistaCargar(root) {
     cab,
     el("p", { class: "nota" }, "Precios en $/kg. Copia el rango de tu Excel con su fila de encabezados y pégalo con Ctrl+V sobre la tabla, o súbelo con «Subir Excel». Si el máximo esperado queda vacío se toma el actual. Marca «Comprado» en las frutas que sí se compraron esta semana."),
     avisos,
-    el("div", { class: "grid-carga" }, [el("div", { class: "card scroll" }, tabla), panelImpacto]),
+    el("div", { class: "grid-carga" }, [panelImpacto, el("div", { class: "card scroll" }, tabla)]),
     el("datalist", { id: "frutas-conocidas" }, FRUTAS_MAPEADAS.map((f) => el("option", { value: titulo(f) })))
   );
   iniciar();

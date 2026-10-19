@@ -92,6 +92,18 @@ export const CONFIG = {
     { cliente: "PROBA", patron: "250 ?G", nombre: "PROBA UE" }, // presentaciones GOYA UE
     { cliente: "PROBA", nombre: "PROBA USA" },
   ],
+  // Datos agronómicos por fruta y semana (los llena Compras/Agrícola en "Cargar semana").
+  agro: {
+    riesgos: ["Bajo", "Medio", "Alto", "Crítico"],
+    clima: [
+      "Lluvia frecuente", "Lluvias intensas / inundación", "Humedad alta", "Sequía / falta de agua",
+      "Heladas", "Granizo", "Calor extremo", "Vientos fuertes", "Nubosidad / poca luz",
+      "Plagas", "Enfermedades / hongos", "Fenómeno El Niño / La Niña",
+      "Inicio de cosecha (alta oferta)", "Fin de temporada (baja oferta)",
+    ],
+    // cómo se ve la fruta (precio/oferta) en un mes
+    perspectiva: ["Sube mucho ↑↑", "Sube ↑", "Estable →", "Baja ↓", "Baja mucho ↓↓"],
+  },
   // Alerta al cargar: cambio de una semana a otra mayor a esto pide confirmar (¿error de tipeo?)
   saltoSospechoso: 0.3,
 };

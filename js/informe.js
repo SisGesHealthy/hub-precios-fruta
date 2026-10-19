@@ -3,7 +3,7 @@
 // gráficas salen vectoriales (nítidas) y no se depende de ninguna librería.
 import { el, clear, toast } from "./dom.js";
 import { estado } from "./app.js";
-import { resumen, serieFruta, detalleFruta, spark } from "./tendencia.js";
+import { resumen, serieFruta, detalleFruta, spark, chipRiesgo, bloqueAgro } from "./tendencia.js";
 import { semanasDesde, semanaCorta, rangoSemana, titulo, usd, pct, claseDelta } from "./util.js";
 
 const opc = { desde: null, hasta: null, frutas: null, umbral: 5, resumen: true, graficas: true, tabla: false,
@@ -105,11 +105,12 @@ function imprimir(rs, eje) {
       kpi("Subieron", String(sube.length), mayor[0] && mayor[0].dRango > 0 ? `más: ${titulo(mayor[0].fruta)} ${pct(mayor[0].dRango)}` : ""),
       kpi("Bajaron", String(baja.length), mayor.length && mayor[mayor.length - 1].dRango < 0 ? `más: ${titulo(mayor[mayor.length - 1].fruta)} ${pct(mayor[mayor.length - 1].dRango)}` : ""),
       kpi("Sobre presupuesto", String(sobrePres.length), "último precio vs presupuesto"),
+      kpi("Riesgo alto o crítico", String(rs.filter((r) => /Alto|Crítico/.test(r.agro?.riesgo || "")).length), rs.filter((r) => /Alto|Crítico/.test(r.agro?.riesgo || "")).map((r) => titulo(r.fruta)).slice(0, 3).join(", ")),
     ]),
     opc.resumen ? el("section", { class: "inf-bloque" }, [
       el("h2", {}, "Resumen de movimientos"),
       el("table", { class: "tabla" }, [
-        el("thead", {}, el("tr", {}, ["Fruta", "Evolución", "Último", "vs hace 4 sem", "En el periodo", "Mín – Máx", "vs presup.", "Sem. compradas", "kg"].map((h, i) => el("th", { class: i > 1 ? "num" : "" }, h)))),
+        el("thead", {}, el("tr", {}, ["Fruta", "Evolución", "Último", "vs hace 4 sem", "En el periodo", "Mín – Máx", "vs presup.", "Sem. compradas", "kg", "Riesgo", "En un mes"].map((h, i) => el("th", { class: i > 1 ? "num" : "" }, h)))),
         el("tbody", {}, rs.map((r) => el("tr", {}, [
           el("td", {}, el("b", {}, titulo(r.fruta))),
           el("td", {}, spark(r.serie)),
@@ -120,13 +121,15 @@ function imprimir(rs, eje) {
           el("td", { class: "num" }, el("span", { class: "delta " + claseDelta(r.dPre) }, pct(r.dPre))),
           el("td", { class: "num" }, `${r.compradas} de ${eje.length}`),
           el("td", { class: "num" }, r.kg ? Math.round(r.kg).toLocaleString("es-EC") : "—"),
+          el("td", { class: "num" }, chipRiesgo(r.agro?.riesgo)),
+          el("td", { class: "num" }, r.agro?.perspectiva || "—"),
         ]))),
       ]),
     ]) : null,
     ...(opc.graficas || opc.tabla ? rs.map((r) => el("section", { class: "inf-fruta" }, [
-      opc.graficas ? detalleFruta(r, eje) : el("h2", {}, titulo(r.fruta)),
+      opc.graficas ? detalleFruta(r, eje) : el("div", {}, [el("h2", {}, titulo(r.fruta)), bloqueAgro(r)]),
       opc.tabla ? el("table", { class: "tabla mini-tabla" }, [
-        el("thead", {}, el("tr", {}, ["Semana", "Actual", "Máximo", "Presupuesto", "Se compró", "kg · compras"].map((h, i) => el("th", { class: i && i < 4 ? "num" : "" }, h)))),
+        el("thead", {}, el("tr", {}, ["Semana", "Actual", "Máximo", "Presupuesto", "Se compró", "kg · compras", "Riesgo", "Clima / comentario"].map((h, i) => el("th", { class: i && i < 4 ? "num" : "" }, h)))),
         el("tbody", {}, r.serie.map((p, i) => el("tr", { class: p ? "" : "dim" }, [
           el("td", {}, `${semanaCorta(eje[i])} · ${rangoSemana(eje[i])}`),
           el("td", { class: "num" }, p ? usd(p.actual, 3) : "—"),
@@ -134,6 +137,8 @@ function imprimir(rs, eje) {
           el("td", { class: "num" }, p ? usd(p.presupuesto, 3) : "—"),
           el("td", {}, p ? (p.comprado ? "sí" : "no") : "—"),
           el("td", {}, p?.nota || ""),
+          el("td", {}, p?.riesgo || ""),
+          el("td", { class: "mini" }, [p?.clima?.join(", ") || "", p?.comentario ? ` — ${p.comentario}` : ""].join("")),
         ]))),
       ]) : null,
     ])) : []),

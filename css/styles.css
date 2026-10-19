@@ -219,7 +219,7 @@ a { color: inherit; text-decoration: none; }
   .informe h2 { font-size: 14px; margin: 10px 0 6px; }
   .informe .inf-cab p { margin: 0; }
   .informe .inf-comentario { background: #f5f7f0; border-left: 3px solid #849e4d; padding: 6px 10px; margin: 0 0 10px; white-space: pre-wrap; }
-  .informe .kpis { grid-template-columns: repeat(4, 1fr); }
+  .informe .kpis { grid-template-columns: repeat(5, 1fr); }
   .informe .kpi b { font-size: 16px; }
   .informe .tabla { font-size: 10.5px; }
   .informe .tabla td, .informe .tabla th { padding: 4px 6px; }
@@ -231,3 +231,35 @@ a { color: inherit; text-decoration: none; }
   .informe .inf-pie { margin-top: 12px; border-top: 1px solid #dfe4d4; padding-top: 6px; }
   .informe .dim td { color: #8a9180; }
 }
+
+/* ---------- datos agronómicos ---------- */
+.sel-agro { border: 1px solid var(--border); border-radius: 8px; padding: 5px 6px; background: var(--card); font-size: 13px; max-width: 150px; }
+.sel-agro.r-bajo, .chip-riesgo.r-bajo { color: var(--verde); }
+.sel-agro.r-medio, .chip-riesgo.r-medio { color: var(--ambar); }
+.sel-agro.r-alto, .chip-riesgo.r-alto, .sel-agro.r-critico, .chip-riesgo.r-critico { color: var(--rojo); font-weight: 700; }
+.sel-agro.p-1, .sel-agro.p-2 { color: var(--rojo); }
+.sel-agro.p-4, .sel-agro.p-5 { color: var(--verde); }
+.chip-riesgo { font-weight: 600; }
+.multi { position: relative; min-width: 150px; max-width: 220px; }
+.multi summary { cursor: pointer; border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; list-style: none; }
+.multi summary::-webkit-details-marker { display: none; }
+.multi[open] summary { border-color: var(--brand); }
+.multi-menu { position: absolute; z-index: 25; top: calc(100% + 4px); left: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 8px 10px; width: 250px; display: grid; gap: 4px; }
+.multi-menu label { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.in-coment { width: 220px; min-height: 32px; border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 6px 8px; resize: vertical; font-size: 13px; }
+.in-coment:hover { border-color: var(--border); }
+.in-coment:focus { outline: 2px solid var(--brand); background: var(--brand-50); }
+.agro { font-size: 13px; margin: 2px 0 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; }
+.agro-coment { flex-basis: 100%; color: var(--dim); font-style: italic; }
+@media print { .informe .agro { font-size: 10.5px; } }
+/* la tabla de carga ahora es ancha (datos agronómicos): el panel de impacto va arriba, a lo ancho */
+.grid-carga { grid-template-columns: minmax(0, 1fr); }
+.impacto { position: static; display: grid; grid-template-columns: minmax(240px, 1fr) minmax(0, 2fr); gap: 4px 18px; align-items: start; }
+.impacto h2 { grid-column: 1 / -1; }
+.impacto .kpis { grid-row: span 3; }
+@media (max-width: 760px) { .impacto { grid-template-columns: minmax(0, 1fr); } }
+/* menú de factores climáticos: dentro de la fila (un menú flotante quedaría cortado por el scroll de la tabla) */
+.multi-menu { position: static; width: 240px; margin-top: 4px; box-shadow: none; }
+.tabla-carga .multi-menu input { width: auto; flex: none; }
+.vista { max-width: 1480px; }
+textarea { font: inherit; color: inherit; }

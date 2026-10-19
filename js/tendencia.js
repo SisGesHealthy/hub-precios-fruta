@@ -94,6 +94,7 @@ export function resumen(fruta, serie) {
     min: Math.min(...precios), max: Math.max(...precios),
     dPre: ult.presupuesto ? ult.actual / ult.presupuesto - 1 : null,
     compradas: pts.filter((p) => p.comprado).length, conDato: pts.length, kg,
+    agro: [...pts].reverse().find((p) => p.riesgo || p.perspectiva || p.clima?.length || p.comentario) || null,
   };
 }
 
@@ -121,7 +122,7 @@ function pintarFruta(cont, sems) {
       el("div", { class: "cli-cab" }, [el("h2", {}, "Cómo se movió cada fruta"),
         el("span", { class: "mini" }, `${semanaCorta(eje[0])} a ${semanaCorta(eje[eje.length - 1])} · ordenadas por el mayor cambio · clic para ver el detalle`)]),
       el("div", { class: "scroll" }, el("table", { class: "tabla" }, [
-        el("thead", {}, el("tr", {}, ["Fruta", "Evolución", "Último", "vs hace 4 sem", "En el periodo", "Mín – Máx", "vs presupuesto", "Semanas compradas", "kg comprados"]
+        el("thead", {}, el("tr", {}, ["Fruta", "Evolución", "Último", "vs hace 4 sem", "En el periodo", "Mín – Máx", "vs presupuesto", "Semanas compradas", "kg comprados", "Riesgo", "En un mes"]
           .map((h, i) => el("th", { class: i > 1 ? "num" : "" }, h)))),
         el("tbody", {}, filas.map((r) => el("tr", { class: "fila" + (r.fruta === tf.fruta ? " elegida" : ""), onclick: () => { tf.fruta = r.fruta; re(); window.scrollTo({ top: cont.offsetTop - 70, behavior: "smooth" }); } }, [
           el("td", {}, el("b", {}, titulo(r.fruta))),
@@ -133,10 +134,29 @@ function pintarFruta(cont, sems) {
           el("td", { class: "num" }, el("span", { class: "delta " + claseDelta(r.dPre) }, pct(r.dPre))),
           el("td", { class: "num" }, `${r.compradas} de ${eje.length}`),
           el("td", { class: "num" }, r.kg ? Math.round(r.kg).toLocaleString("es-EC") : "—"),
+          el("td", { class: "num" }, chipRiesgo(r.agro?.riesgo)),
+          el("td", { class: "num" }, r.agro?.perspectiva || "—"),
         ]))),
       ])),
     ])
   );
+}
+
+export function chipRiesgo(v) {
+  return v ? el("span", { class: "chip-riesgo r-" + v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() }, v) : "—";
+}
+
+// situación agronómica más reciente de la fruta (riesgo, clima, perspectiva, comentario)
+export function bloqueAgro(r) {
+  const a = r.agro;
+  if (!a) return el("p", { class: "mini agro" }, "Sin datos agronómicos cargados.");
+  return el("div", { class: "agro" }, [
+    el("span", { class: "mini" }, `Situación agronómica (${semanaCorta(a.semana)}): `),
+    a.riesgo ? ["Riesgo ", chipRiesgo(a.riesgo), " · "] : null,
+    a.clima?.length ? el("span", {}, `Clima: ${a.clima.join(", ")} · `) : null,
+    a.perspectiva ? el("span", {}, `En un mes: ${a.perspectiva}`) : null,
+    a.comentario ? el("div", { class: "agro-coment" }, `“${a.comentario}”`) : null,
+  ].flat());
 }
 
 // minigráfica de la tabla: solo el precio actual (sin ejes); hueco donde no hubo dato
@@ -204,6 +224,7 @@ export function detalleFruta(r, eje) {
       cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.classList.remove("hidden");
       tip.innerHTML = `<b>${titulo(r.fruta)} · ${semanaCorta(w)}</b> <span class="mini">${rangoSemana(w)}</span><br>` + (p
         ? `Actual ${usd(p.actual)}${p.comprado ? "" : " (no se compró)"}<br>Máximo ${usd(p.maximo)}<br>Presupuesto ${usd(p.presupuesto)}${p.nota ? "<br>" + p.nota : ""}`
+          + (p.riesgo ? `<br>Riesgo: ${p.riesgo}` : "") + (p.clima?.length ? `<br>Clima: ${p.clima.join(", ")}` : "") + (p.perspectiva ? `<br>En un mes: ${p.perspectiva}` : "")
         : "Sin precio esta semana (no se compró)");
       tip.classList.remove("hidden");
     });
@@ -226,6 +247,7 @@ export function detalleFruta(r, eje) {
       el("span", {}, [el("i", { class: "sw hueco" }), "Solo referencia"]),
       el("span", {}, [el("i", { class: "sw kg" }), "kg comprados"]),
     ]),
+    bloqueAgro(r),
     g, tip,
   ]);
 }
