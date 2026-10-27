@@ -159,7 +159,7 @@ export function vistaCargar(root) {
         el("td", {}, selAgro(r, "riesgo", CONFIG.agro.riesgos, "Riesgo agronómico")),
         el("td", {}, multiClima(r)),
         el("td", {}, selAgro(r, "perspectiva", CONFIG.agro.perspectiva, "Cómo se ve en un mes")),
-        el("td", {}, el("textarea", { class: "in-coment", rows: 1, placeholder: "—", "aria-label": `Comentario agronómico ${r.fruta}`, oninput: (e) => (r.comentario = e.target.value) }, r.comentario || "")),
+        el("td", {}, el("textarea", { class: "in-coment", rows: 1, placeholder: "—", "aria-label": `Comentario agronómico ${r.fruta}`, oninput: (e) => { r.comentario = e.target.value; crecer(e.target); } }, r.comentario || "")),
         el("td", {}, el("input", { class: "in-nota", value: r.nota, placeholder: "—", "aria-label": "Nota", oninput: (e) => (r.nota = e.target.value) })),
         el("td", {}, el("button", { class: "btn-x", title: "Quitar fila", "aria-label": "Quitar fila", onclick: () => { borrador.splice(i, 1); pintar(); } }, "×")),
       ]);
@@ -167,6 +167,7 @@ export function vistaCargar(root) {
       tbody.appendChild(tr);
     });
     pintarDeltas();
+    requestAnimationFrame(crecerTodos); // los comentarios se ven completos (el alto se mide ya dibujado)
   }
 
   function pintarDeltas() {
@@ -452,6 +453,26 @@ export function vistaCargar(root) {
     }
   }
 
+  // Vista de la tabla: todas las columnas, solo precios o solo lo agronómico (Agrícola entra en
+  // "Agronómico"). Se recuerda por persona en este navegador.
+  const CLAVE_VISTA = "hub-precios-fruta:vistaCarga:" + (estado.usuario?.correo || "");
+  let vistaTabla = (() => { try { return localStorage.getItem(CLAVE_VISTA); } catch { return null; } })() || (puedePrecios ? "todo" : "agro");
+  const selVista = el("div", { class: "seg vista-sel", role: "group", "aria-label": "Columnas a mostrar" });
+  function pintarVista() {
+    tabla.classList.toggle("vista-precios", vistaTabla === "precios");
+    tabla.classList.toggle("vista-agro", vistaTabla === "agro");
+    clear(selVista);
+    [["todo", "Todo"], ["precios", "Precios"], ["agro", "Agronómico"]].forEach(([v, t]) =>
+      selVista.appendChild(el("button", { class: v === vistaTabla ? "on" : "", "aria-pressed": v === vistaTabla, onclick: () => {
+        vistaTabla = v;
+        try { localStorage.setItem(CLAVE_VISTA, v); } catch {}
+        pintarVista();
+        requestAnimationFrame(crecerTodos);
+      } }, t)));
+  }
+  function crecer(t) { t.style.height = "auto"; t.style.height = t.scrollHeight + 2 + "px"; }
+  function crecerTodos() { tbody.querySelectorAll(".in-coment").forEach(crecer); }
+
   const tabla = el("table", { class: "tabla tabla-carga", onpaste: onPaste }, [
     el("thead", {}, el("tr", {}, ["Fruta", "Presupuesto", "Actual", "Máx. esperado", "Comprado", "vs sem. ant.", "vs presup.", "Riesgo agronómico", "Factores climáticos", "En un mes", "Comentario agronómico", "Nota", ""].map((h, i) =>
       el("th", { class: i === 4 ? "centro" : i > 0 && i < 7 ? "num" : "" }, h)))),
@@ -460,10 +481,15 @@ export function vistaCargar(root) {
   root.append(
     cab,
     el("p", { class: "nota" }, "Precios en $/kg. Copia el rango de tu Excel con su fila de encabezados y pégalo con Ctrl+V sobre la tabla, o súbelo con «Subir Excel». Si el máximo esperado queda vacío se toma el actual. Marca «Comprado» en las frutas que sí se compraron esta semana."),
-    !puedePrecios && puedeAgro ? el("div", { class: "aviso" }, "Puedes registrar riesgo agronómico, factores climáticos, «en un mes» y comentario de cada fruta. Los precios los carga Compras y aquí se ven de solo lectura.") : null,
+    !puedePrecios && puedeAgro ? el("div", { class: "aviso" }, "Puedes registrar riesgo agronómico, factores climáticos, «en un mes» y comentario de cada fruta. Los precios los carga Compras y aquí se ven de solo lectura.") : "", // root.append escribiría "null"
     avisos,
-    el("div", { class: "grid-carga" }, [panelImpacto, el("div", { class: "card scroll" }, tabla)]),
+    el("div", { class: "grid-carga" }, [panelImpacto, el("div", {}, [
+      el("div", { class: "barra-tabla" }, [el("span", { class: "mini" }, "Columnas:"), selVista,
+        el("span", { class: "mini" }, "La fruta y los encabezados quedan fijos al desplazarte.")]),
+      el("div", { class: "card tabla-wrap" }, tabla),
+    ])]),
     el("datalist", { id: "frutas-conocidas" }, FRUTAS_MAPEADAS.map((f) => el("option", { value: titulo(f) })))
   );
+  pintarVista();
   iniciar();
 }
